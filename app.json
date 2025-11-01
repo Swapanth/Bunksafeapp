@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "bunksafe",
+    "slug": "bunksafe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/Bunksafe.png",
+    "scheme": "bunksafe",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/Bunksafe.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.swapanthvakapalli.bunksafe",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/Bunksafe.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/Bunksafe.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/Bunksafe.png",
+          "color": "#ffffff"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1a118060-a766-48bf-8dcd-d70b88fbfb32"
+      }
+    }
+  }
+}

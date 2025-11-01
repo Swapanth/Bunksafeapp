@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read and write their own user document
+    // Also allow authenticated users to query users by email for existence checks
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null;
+    }
+    
+    // Public user registry for existence checks (email/mobile only)
+    match /userRegistry/{registryId} {
+      allow read: if true; // Allow public read for existence checks
+      allow write: if request.auth != null; // Only authenticated users can write
+    }
+    
+    // Classrooms - users can read classrooms they're members of
+    match /classrooms/{classroomId} {
+      allow read: if request.auth != null && 
+        request.auth.uid in resource.data.members;
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.createdBy;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+    }
+    
+    // Schedules - users can read schedules for classrooms they're members of
+    match /schedules/{scheduleId} {
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/classrooms/$(resource.data.classroomId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/classrooms/$(resource.data.classroomId)).data.members;
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.createdBy;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+    }
+    
+    // Attendance records - users can read and write their own attendance
+    match /attendance/{attendanceId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Attendance streaks - users can read and write their own streaks
+    match /attendanceStreaks/{userId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Tasks - users can read and write their own tasks
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Friends - users can read and write their own friend relationships
+    match /friends/{friendId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.friendUserId);
+      allow create: if request.auth != null && 
+        (request.auth.uid == request.resource.data.userId || 
+         request.auth.uid == request.resource.data.friendUserId);
+    }
+    
+    // Friend requests - users can read requests sent to them or by them
+    match /friendRequests/{requestId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.fromUserId || 
+         request.auth.uid == resource.data.toUserId);
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.fromUserId;
+    }
+    
+    // Study groups - users can read groups they're members of
+    match /studyGroups/{groupId} {
+      allow read: if request.auth != null && 
+        request.auth.uid in resource.data.members;
+      allow write: if request.auth != null && 
+        (request.auth.uid == resource.data.createdBy || 
+         request.auth.uid in resource.data.members);
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+    }
+    
+    // Public user profiles - allow reading basic profile info for classmates
+    match /userProfiles/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // User notification settings - users can read and write their own settings
+    match /userNotificationSettings/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Notifications - users can read their own notifications
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+  }
+}
