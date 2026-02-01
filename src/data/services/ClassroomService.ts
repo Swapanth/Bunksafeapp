@@ -1,14 +1,14 @@
 import {
-  arrayRemove,
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  setDoc,
-  updateDoc,
-  where,
+    arrayRemove,
+    arrayUnion,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    query,
+    setDoc,
+    updateDoc,
+    where,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { Classroom, ClassSchedule, Schedule } from "../../domain/model/Classroom";
@@ -194,6 +194,24 @@ export class FirebaseClassroomService {
       return null;
     } catch (error) {
       console.error("Error getting classroom:", error);
+      return null;
+    }
+  }
+
+  // Get classroom by code
+  async getClassroomByCode(classroomCode: string): Promise<Classroom | null> {
+    try {
+      const classroomsRef = collection(db, "classrooms");
+      const q = query(classroomsRef, where("code", "==", classroomCode.trim()));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        return null;
+      }
+
+      return querySnapshot.docs[0].data() as Classroom;
+    } catch (error) {
+      console.error("Error getting classroom by code:", error);
       return null;
     }
   }

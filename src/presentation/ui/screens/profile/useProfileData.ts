@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { InteractionManager } from 'react-native';
 
 // Types (these should ideally be imported from a shared types file)
 export interface UserProfile {
@@ -58,8 +59,45 @@ export const useProfileData = (service?: ProfileDataService) => {
   const [toggleSettings, setToggleSettings] = useState<ToggleSetting[]>([]);
   const [settingSections, setSettingSections] = useState<SettingsSection[]>([]);
   const [appInfo, setAppInfo] = useState<AppInfo>({ version: 'v1.0.0', tagline: 'Built with ❤️' });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Start false for instant render
   const [error, setError] = useState<string | null>(null);
+
+  // Update toggle setting
+  const updateToggleSetting = useCallback(async (id: string, value: boolean) => {
+    try {
+      const profileService = service || createDefaultProfileService();
+      await profileService.updateToggleSetting(id, value);
+      setToggleSettings(prev => 
+        prev.map(setting => 
+          setting.id === id ? { ...setting, value } : setting
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update setting');
+    }
+  }, [service]);
+
+  // Create toggle settings with proper onChange handlers
+  const createToggleSettings = useCallback((settings: Omit<ToggleSetting, 'onChange'>[]) => {
+    return settings.map(setting => ({
+      ...setting,
+      onChange: (value: boolean) => {
+        // Optimistically update the UI first
+        setToggleSettings(prev => 
+          prev.map(s => s.id === setting.id ? { ...s, value } : s)
+        );
+        
+        // Then update the backend
+        updateToggleSetting(setting.id, value).catch((err) => {
+          // Revert on error
+          setToggleSettings(prev => 
+            prev.map(s => s.id === setting.id ? { ...s, value: !value } : s)
+          );
+          console.error('Failed to update setting:', err);
+        });
+      },
+    }));
+  }, [updateToggleSetting]);
 
   // Load all profile data
   const loadProfileData = useCallback(async () => {
@@ -102,46 +140,14 @@ export const useProfileData = (service?: ProfileDataService) => {
     }
   }, [service, user]);
 
-  // Update toggle setting
-  const updateToggleSetting = useCallback(async (id: string, value: boolean) => {
-    try {
-      const profileService = service || createDefaultProfileService();
-      await profileService.updateToggleSetting(id, value);
-      setToggleSettings(prev => 
-        prev.map(setting => 
-          setting.id === id ? { ...setting, value } : setting
-        )
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update setting');
-    }
-  }, [service]);
-
-  // Create toggle settings with proper onChange handlers
-  const createToggleSettings = useCallback((settings: Omit<ToggleSetting, 'onChange'>[]) => {
-    return settings.map(setting => ({
-      ...setting,
-      onChange: (value: boolean) => {
-        // Optimistically update the UI first
-        setToggleSettings(prev => 
-          prev.map(s => s.id === setting.id ? { ...s, value } : s)
-        );
-        
-        // Then update the backend
-        updateToggleSetting(setting.id, value).catch((err) => {
-          // Revert on error
-          setToggleSettings(prev => 
-            prev.map(s => s.id === setting.id ? { ...s, value: !value } : s)
-          );
-          setError(err instanceof Error ? err.message : 'Failed to update setting');
-        });
-      },
-    }));
-  }, [updateToggleSetting]);
-
-  // Load data on mount
+  // Load data on mount - deferred for instant UI
   useEffect(() => {
-    loadProfileData();
+    const task = InteractionManager.runAfterInteractions(() => {
+      setLoading(true);
+      loadProfileData();
+    });
+
+    return () => task.cancel();
   }, [loadProfileData]);
 
   return {

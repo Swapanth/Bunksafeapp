@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useFriends } from '../../../hooks/useFriends';
 
 interface Conversation {
   id: string;
@@ -17,76 +18,45 @@ interface Conversation {
   lastMessageType: 'text' | 'image' | 'file' | 'study-session';
 }
 
-export const ChatListScreen: React.FC = () => {
-  const [conversations, setConversations] = React.useState<Conversation[]>([
-    {
-      id: '1',
-      contactId: 'c1',
-      contactName: 'Sarah Williams',
-      contactAvatar: '👩‍🎓',
-      lastMessage: 'That sounds great! Should we meet in the library?',
-      timestamp: new Date(Date.now() - 300000), // 5 minutes ago
-      unreadCount: 2,
-      isOnline: true,
-      isClassroomChat: false,
-      isTyping: true,
-      lastMessageType: 'text',
-    },
-    {
-      id: '2',
-      contactId: 'group1',
-      contactName: 'Computer Science 101',
-      contactAvatar: '📚',
-      lastMessage: 'Prof. Anderson: Assignment deadline extended to Friday',
-      timestamp: new Date(Date.now() - 1800000), // 30 minutes ago
-      unreadCount: 5,
-      isOnline: true,
-      isClassroomChat: true,
-      classroomName: 'Computer Science 101',
-      isTyping: false,
-      lastMessageType: 'text',
-    },
-    {
-      id: '3',
-      contactId: 'c2',
-      contactName: 'David Kim',
-      contactAvatar: '👨‍💼',
-      lastMessage: 'Thanks for the study notes!',
-      timestamp: new Date(Date.now() - 3600000), // 1 hour ago
-      unreadCount: 0,
-      isOnline: false,
-      isClassroomChat: false,
-      isTyping: false,
-      lastMessageType: 'text',
-    },
-    {
-      id: '4',
-      contactId: 'group2',
-      contactName: 'Math Study Squad',
-      contactAvatar: '🧮',
-      lastMessage: 'You: Started a study session',
-      timestamp: new Date(Date.now() - 7200000), // 2 hours ago
-      unreadCount: 0,
-      isOnline: true,
-      isClassroomChat: true,
-      classroomName: 'Math Study Squad',
-      isTyping: false,
-      lastMessageType: 'study-session',
-    },
-    {
-      id: '5',
-      contactId: 'c3',
-      contactName: 'Emma Wilson',
-      contactAvatar: '👩‍🦰',
-      lastMessage: 'Good luck with the exam tomorrow! 🍀',
-      timestamp: new Date(Date.now() - 86400000), // 1 day ago
-      unreadCount: 0,
-      isOnline: true,
-      isClassroomChat: false,
-      isTyping: false,
-      lastMessageType: 'text',
-    },
-  ]);
+interface ChatListScreenProps {
+  userId: string;
+}
+
+export const ChatListScreen: React.FC<ChatListScreenProps> = ({ userId }) => {
+  const { classmates, classmatesLoading, loadClassmates } = useFriends(userId);
+  
+  useEffect(() => {
+    // Load classmates from all classrooms the user is in
+    if (userId) {
+      console.log('🔄 ChatListScreen: Loading classmates for user:', userId);
+      loadClassmates();
+    }
+  }, [userId, loadClassmates]);
+  
+  const [conversations, setConversations] = React.useState<Conversation[]>([]);
+
+  // Convert classmates to conversations format
+  useEffect(() => {
+    if (classmates && classmates.length > 0) {
+      const classmateConversations: Conversation[] = classmates.map((classmate, index) => ({
+        id: classmate.id || classmate.userId,
+        contactId: classmate.userId,
+        contactName: classmate.name,
+        contactAvatar: classmate.avatar || '👤',
+        lastMessage: classmate.isFriend ? 'Your classmate' : 'Classmate - Send a friend request',
+        timestamp: classmate.lastSeen || new Date(),
+        unreadCount: 0,
+        isOnline: classmate.isOnline || false,
+        isClassroomChat: false,
+        classroomName: classmate.classroom,
+        isTyping: false,
+        lastMessageType: 'text',
+      }));
+      
+      setConversations(classmateConversations);
+      console.log('✅ Loaded', classmateConversations.length, 'classmates as conversations');
+    }
+  }, [classmates]);
 
   const [selectedChats, setSelectedChats] = React.useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = React.useState(false);
@@ -173,6 +143,16 @@ export const ChatListScreen: React.FC = () => {
 
   const totalUnreadCount = conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
 
+  // Show loading state
+  if (classmatesLoading && conversations.length === 0) {
+    return (
+      <View className="flex-1 justify-center items-center" style={{ backgroundColor: '#fafafa' }}>
+        <ActivityIndicator size="large" color="#10b981" />
+        <Text className="text-gray-600 mt-4">Loading classmates...</Text>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1" style={{ backgroundColor: '#fafafa' }}>
       {/* Header */}
@@ -230,7 +210,6 @@ export const ChatListScreen: React.FC = () => {
             <View className="flex-row space-x-4">
               <TouchableOpacity className="bg-white rounded-2xl p-4 border border-gray-200 items-center min-w-[80px]">
                 <View className="bg-green-500 p-3 rounded-full mb-2">
-                  <Ionicons name="people" size={20} color="#ffffff" />
                 </View>
                 <Text className="text-xs text-gray-700 font-medium">Study Groups</Text>
               </TouchableOpacity>
@@ -256,7 +235,18 @@ export const ChatListScreen: React.FC = () => {
       {/* Chat List */}
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-6 py-2">
-          {conversations.map((conversation) => (
+          {conversations.length === 0 ? (
+            <View className="bg-white rounded-2xl p-8 mt-4 border border-gray-100 items-center">
+              <View className="w-20 h-20 bg-gray-100 rounded-full items-center justify-center mb-4">
+                <Ionicons name="people-outline" size={40} color="#9ca3af" />
+              </View>
+              <Text className="text-lg font-semibold text-gray-800 mb-2">No Classmates Yet</Text>
+              <Text className="text-gray-500 text-center text-sm leading-5">
+                Join a classroom to see your classmates here and start chatting
+              </Text>
+            </View>
+          ) : (
+            conversations.map((conversation) => (
             <TouchableOpacity
               key={conversation.id}
               className={`bg-white rounded-2xl p-4 mb-3 border ${
@@ -321,7 +311,7 @@ export const ChatListScreen: React.FC = () => {
                 )}
               </View>
             </TouchableOpacity>
-          ))}
+          )))}
         </View>
         
         {/* Bottom Padding */}

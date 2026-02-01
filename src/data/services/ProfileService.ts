@@ -109,39 +109,39 @@ export const createRealProfileService = (user: User): ProfileDataService => {
                 // when this action is triggered
               },
             },
-            {
-              id: "changePassword",
-              icon: "lock-closed-outline",
-              label: "Change Password",
-              action: () => console.log("Change password"),
-            },
+            // {
+            //   id: "changePassword",
+            //   icon: "lock-closed-outline",
+            //   label: "Change Password",
+            //   action: () => console.log("Change password"),
+            // },
           ],
         },
 
-        {
-          id: "support",
-          title: "🛠️ Support & Help",
-          items: [
-            {
-              id: "help",
-              icon: "help-circle-outline",
-              label: "Help Center",
-              action: () => console.log("Help center"),
-            },
-            {
-              id: "feedback",
-              icon: "chatbubble-outline",
-              label: "Send Feedback",
-              action: () => console.log("Send feedback"),
-            },
-            {
-              id: "about",
-              icon: "information-circle-outline",
-              label: "About BunkSafe",
-              action: () => console.log("About app"),
-            },
-          ],
-        },
+        // {
+        //   id: "support",
+        //   title: "🛠️ Support & Help",
+        //   items: [
+        //     {
+        //       id: "help",
+        //       icon: "help-circle-outline",
+        //       label: "Help Center",
+        //       action: () => console.log("Help center"),
+        //     },
+        //     {
+        //       id: "feedback",
+        //       icon: "chatbubble-outline",
+        //       label: "Send Feedback",
+        //       action: () => console.log("Send feedback"),
+        //     },
+        //     {
+        //       id: "about",
+        //       icon: "information-circle-outline",
+        //       label: "About BunkSafe",
+        //       action: () => console.log("About app"),
+        //     },
+        //   ],
+        // },
       ];
     },
 

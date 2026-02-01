@@ -1,5 +1,7 @@
+import { AppNotificationInitializer } from '@/src/core/services/AppNotificationInitializer';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
+import { auth } from '../../config/firebase';
 import { DIContainer } from '../../core/di/DIContainer';
 import { LoginCredentials, User } from '../../domain/model/User';
 import { MainApp } from '../ui/components/MainApp';
@@ -7,7 +9,6 @@ import { LoginScreen } from '../ui/screens/auth/LoginScreen';
 import { GetStartedScreen } from '../ui/screens/onboarding/GetStartedScreen';
 import { OnboardingFlow } from '../ui/screens/onboarding/OnboardingFlow';
 import { useAuthViewModel } from '../viewmodel/AuthViewModel';
-import { AppNotificationInitializer } from '@/src/core/services/AppNotificationInitializer';
 
 export type AppState = 'getStarted' | 'login' | 'signup' | 'dashboard';
 
@@ -22,7 +23,7 @@ export const AppNavigator: React.FC<AppNavigatorProps> = ({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  const { state, login, checkAuthStatus } = useAuthViewModel(
+  const { state, login, checkAuthStatus, logout: logoutFromViewModel } = useAuthViewModel(
     DIContainer.loginUseCase,
     DIContainer.getCurrentUserUseCase
   );
@@ -31,20 +32,35 @@ export const AppNavigator: React.FC<AppNavigatorProps> = ({
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        console.log('🔍 Checking initial auth status...');
-        await checkAuthStatus();
+        console.log('🔍 Waiting for Firebase auth state restoration...');
+        
+        // Wait for Firebase to restore auth state from AsyncStorage
+        // This is critical to prevent auto-logout when app is closed/reopened
+        await new Promise<void>((resolve) => {
+          const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+            console.log('🔥 Firebase auth state restored:', firebaseUser ? firebaseUser.email : 'No user');
+            
+            // Unsubscribe immediately after first emission
+            unsubscribe();
+            
+            // Now check our app's auth status
+            await checkAuthStatus();
 
-        if (state.isAuthenticated && state.user) {
-          console.log('✅ User is authenticated:', state.user.email);
-          setCurrentUser(state.user);
-          setCurrentScreen('dashboard');
-        } else {
-          console.log('❌ User is not authenticated');
-          // Only set to getStarted if we're still on the initial screen
-          if (currentScreen === initialScreen) {
-            setCurrentScreen('getStarted');
-          }
-        }
+            if (state.isAuthenticated && state.user) {
+              console.log('✅ User is authenticated:', state.user.email);
+              setCurrentUser(state.user);
+              setCurrentScreen('dashboard');
+            } else {
+              console.log('❌ User is not authenticated');
+              // Only set to getStarted if we're still on the initial screen
+              if (currentScreen === initialScreen) {
+                setCurrentScreen('getStarted');
+              }
+            }
+            
+            resolve();
+          });
+        });
       } catch (error) {
         console.error('❌ Auth initialization failed:', error);
         setCurrentScreen('getStarted');
@@ -142,11 +158,14 @@ export const AppNavigator: React.FC<AppNavigatorProps> = ({
 
   const handleLogout = async () => {
     try {
+      console.log('🚪 Logging out user...');
       await DIContainer.authRepository.logout();
+      logoutFromViewModel();
       setCurrentUser(null);
       setCurrentScreen('login');
+      console.log('✅ Logout complete, redirected to login');
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('❌ Logout failed:', error);
     }
   };
 

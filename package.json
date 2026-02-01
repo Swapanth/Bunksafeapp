@@ -23,12 +23,14 @@
     "send-expo-sms": "node ./scripts/send-expo-sms.js",
     "setup-firebase-phone": "node ./scripts/setup-firebase-phone-auth.js",
     "verify-firebase-setup": "node ./scripts/verify-firebase-setup.js",
-    "send-otp-direct": "node ./scripts/send-otp-direct.js"
+    "send-otp-direct": "node ./scripts/send-otp-direct.js",
+    "insert-sample-data": "node ./scripts/insertSampleData.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
+    "dotenv": "^17.2.3",
     "expo": "54.0.21",
     "expo-clipboard": "~8.0.7",
     "expo-constants": "~18.0.10",
@@ -39,6 +41,7 @@
     "expo-splash-screen": "~31.0.10",
     "expo-status-bar": "~3.0.8",
     "firebase": "^12.2.1",
+    "firebase-admin": "^13.6.0",
     "nativewind": "^4.1.23",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -55,6 +58,8 @@
     "@babel/core": "^7.25.2",
     "@react-native-community/cli": "^20.0.1",
     "@types/react": "^19.2.2",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "eas-cli": "^16.31.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
     "typescript": "~5.8.3"

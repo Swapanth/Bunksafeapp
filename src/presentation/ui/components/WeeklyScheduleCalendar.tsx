@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { BackHandler, InteractionManager, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { AttendanceSummary } from '../../../domain/model/Attendance';
+import { dataCache } from '../../utils/DataCache';
 import { ScheduleEditModal } from './ScheduleEditModal';
 import { ScheduleSkeleton } from './skeletons/ScheduleSkeleton';
 
@@ -55,12 +56,16 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
   onClose,
   userId
 }) => {
+  const cacheKey = `weekly_schedule_${userId}`;
+  const cachedSchedule = dataCache.get<{ [key: string]: WeeklyClass[] }>(cacheKey);
+  const cachedColors = dataCache.get<{ [key: string]: string }>(`schedule_colors_${userId}`);
+  
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<WeeklyClass | null>(null);
-  const [weeklySchedule, setWeeklySchedule] = useState<{ [key: string]: WeeklyClass[] }>({});
-  const [loading, setLoading] = useState(true);
+  const [weeklySchedule, setWeeklySchedule] = useState<{ [key: string]: WeeklyClass[] }>(cachedSchedule || {});
+  const [loading, setLoading] = useState(!cachedSchedule); // Don't show loading if we have cached data
   const [error, setError] = useState<string | null>(null);
-  const [subjectColors, setSubjectColors] = useState<{ [key: string]: string }>({});
+  const [subjectColors, setSubjectColors] = useState<{ [key: string]: string }>(cachedColors || {});
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingClassroomId, setEditingClassroomId] = useState<string | null>(null);
 
@@ -77,20 +82,36 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
     return COLOR_PALETTE[colorIndex];
   };
 
+  // Handle Android back button to close modal
+  useEffect(() => {
+    if (!visible) return;
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true; // Prevent default behavior (exit app)
+    });
+
+    return () => backHandler.remove();
+  }, [visible, onClose]);
+
   // Load schedule data when component mounts or userId changes
   useEffect(() => {
-    if (visible && userId) {
-      loadWeeklySchedule();
+    if (visible && userId && !cachedSchedule) {
+      // Defer loading to not block modal animation
+      const task = InteractionManager.runAfterInteractions(() => {
+        setLoading(true);
+        loadWeeklySchedule();
+      });
+      return () => task.cancel();
     }
-  }, [visible, userId]);
+  }, [visible, userId, cachedSchedule]);
 
   const loadWeeklySchedule = async () => {
     try {
-      setLoading(true);
       setError(null);
 
       const { FirebaseClassroomService } = await import('../../../data/services/ClassroomService');
-      const { FirebaseAttendanceService } = await import('../../../data/services/FirebaseAttendanceService');
+      const { FirebaseAttendanceService } = await import('../../../data/services/AttendanceService');
 
       const classroomService = new FirebaseClassroomService();
       const attendanceService = new FirebaseAttendanceService();
@@ -105,56 +126,78 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
       });
 
       const today = new Date().toISOString().split('T')[0];
+      const todayDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
       const dynamicSubjectColors: { [key: string]: string } = {};
 
-      for (const classroom of classrooms) {
-        // Get schedule for this classroom
-        const schedule = await classroomService.getClassroomSchedule(classroom.id);
+      // Fetch all data in parallel for much better performance
+      const classroomDataPromises = classrooms.map(async (classroom) => {
+        try {
+          // Get schedule for this classroom
+          const schedule = await classroomService.getClassroomSchedule(classroom.id);
+          if (!schedule) return [];
 
-        if (schedule) {
-          for (const cls of schedule.classes) {
-            // Get attendance summary for this class
-            const attendanceSummary = await attendanceService.getAttendanceSummary(
-              userId,
-              cls.id,
-              classroom.attendanceTarget
-            );
+          // Fetch all class data in parallel
+          const classDataPromises = schedule.classes.map(async (cls) => {
+            try {
+              // Parallel fetch attendance summary and today's record
+              const [attendanceSummary, todayRecord] = await Promise.all([
+                attendanceService.getAttendanceSummary(userId, cls.id, classroom.attendanceTarget)
+                  .catch(err => {
+                    console.warn('Failed to fetch attendance summary:', err);
+                    return null;
+                  }),
+                cls.day === todayDay
+                  ? attendanceService.getAttendanceRecord(userId, cls.id, today)
+                      .catch(err => {
+                        console.warn('Failed to fetch today record:', err);
+                        return null;
+                      })
+                  : Promise.resolve(null)
+              ]);
 
-            // Check today's attendance if it's the same day
-            const todayDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-            let todayAttendance: 'present' | 'absent' | null = null;
+              // Generate or get existing color for this subject
+              if (!dynamicSubjectColors[cls.name]) {
+                dynamicSubjectColors[cls.name] = generateSubjectColor(cls.name);
+              }
 
-            if (cls.day === todayDay) {
-              const todayRecord = await attendanceService.getAttendanceRecord(userId, cls.id, today);
-              todayAttendance = todayRecord?.status || null;
+              const weeklyClass: WeeklyClass = {
+                id: cls.id,
+                classId: cls.id,
+                classroomId: classroom.id,
+                subject: cls.name,
+                instructor: cls.instructor,
+                startTime: cls.startTime,
+                endTime: cls.endTime,
+                location: cls.location,
+                color: dynamicSubjectColors[cls.name],
+                day: cls.day,
+                attendanceSummary: attendanceSummary || undefined,
+                todayAttendance: todayRecord?.status || null
+              };
+
+              return weeklyClass;
+            } catch (err) {
+              console.warn('Error processing class:', err);
+              return null;
             }
+          });
 
-            // Generate or get existing color for this subject
-            if (!dynamicSubjectColors[cls.name]) {
-              dynamicSubjectColors[cls.name] = generateSubjectColor(cls.name);
-            }
-
-            const weeklyClass: WeeklyClass = {
-              id: cls.id,
-              classId: cls.id,
-              classroomId: classroom.id,
-              subject: cls.name,
-              instructor: cls.instructor,
-              startTime: cls.startTime,
-              endTime: cls.endTime,
-              location: cls.location,
-              color: dynamicSubjectColors[cls.name],
-              day: cls.day,
-              attendanceSummary: attendanceSummary || undefined,
-              todayAttendance
-            };
-
-            if (scheduleData[cls.day]) {
-              scheduleData[cls.day].push(weeklyClass);
-            }
-          }
+          return Promise.all(classDataPromises);
+        } catch (err) {
+          console.warn('Error processing classroom:', err);
+          return [];
         }
-      }
+      });
+
+      // Wait for all classroom data to be fetched
+      const allClassroomData = await Promise.all(classroomDataPromises);
+
+      // Flatten and organize by day
+      allClassroomData.flat().forEach((weeklyClass) => {
+        if (weeklyClass && scheduleData[weeklyClass.day]) {
+          scheduleData[weeklyClass.day].push(weeklyClass);
+        }
+      });
 
       // Sort classes by start time for each day
       Object.keys(scheduleData).forEach(day => {
@@ -163,6 +206,10 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
 
       setWeeklySchedule(scheduleData);
       setSubjectColors(dynamicSubjectColors);
+      
+      // Cache the schedule for 10 minutes
+      dataCache.set(cacheKey, scheduleData, 10 * 60 * 1000);
+      dataCache.set(`schedule_colors_${userId}`, dynamicSubjectColors, 10 * 60 * 1000);
     } catch (err) {
       console.error('Error loading weekly schedule:', err);
       setError('Failed to load schedule data');
@@ -194,190 +241,59 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
 
   const getClassesForTimeSlot = (day: string, timeSlot: string) => {
     const dayClasses = weeklySchedule[day] || [];
-    return dayClasses.filter(cls => cls.startTime === timeSlot);
+    
+    // Parse the time slot hour (e.g., "09:00" -> 9)
+    const slotHour = parseInt(timeSlot.split(':')[0], 10);
+    
+    return dayClasses.filter(cls => {
+      // Parse the class start time hour (e.g., "09:30" -> 9)
+      const classHour = parseInt(cls.startTime.split(':')[0], 10);
+      
+      // Show the class in the time slot if it starts in that hour
+      return classHour === slotHour;
+    });
+  };
+
+  // Calculate class duration in minutes
+  const getClassDuration = (startTime: string, endTime: string): number => {
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    
+    return endMinutes - startMinutes;
+  };
+
+  // Calculate vertical position from time slot start
+  const getClassOffset = (classStartTime: string, slotStartTime: string): number => {
+    const [classHour, classMin] = classStartTime.split(':').map(Number);
+    const [slotHour, slotMin] = slotStartTime.split(':').map(Number);
+    
+    const classMinutes = classHour * 60 + classMin;
+    const slotMinutes = slotHour * 60 + slotMin;
+    
+    const offsetMinutes = classMinutes - slotMinutes;
+    // Convert minutes to pixels (1 minute = 1 pixel)
+    return offsetMinutes;
   };
 
   const getAttendanceStatusColor = (cls: WeeklyClass) => {
     if (!cls.attendanceSummary) return '#6b7280';
 
-    const { attendancePercentage, isAttendanceCritical } = cls.attendanceSummary;
+    const { currentAttendancePercentage, isAttendanceCritical } = cls.attendanceSummary;
 
     if (isAttendanceCritical) return '#ef4444'; // red
-    if (attendancePercentage >= 90) return '#10b981'; // green
-    if (attendancePercentage >= 75) return '#f59e0b'; // amber
+    if (currentAttendancePercentage >= 90) return '#10b981'; // green
+    if (currentAttendancePercentage >= 75) return '#f59e0b'; // amber
     return '#ef4444'; // red
   };
 
   const formatAttendancePercentage = (cls: WeeklyClass) => {
     if (!cls.attendanceSummary) return 'N/A';
-    return `${cls.attendanceSummary.attendancePercentage.toFixed(1)}%`;
+    return `${cls.attendanceSummary.currentAttendancePercentage.toFixed(1)}%`;
   };
 
-  const renderCalendarView = () => {
-    // Calculate overall stats
-    const allClasses = Object.values(weeklySchedule).flat();
-    const totalClasses = allClasses.reduce((sum, cls) => sum + (cls.attendanceSummary?.totalClasses || 0), 0);
-    const totalAttended = allClasses.reduce((sum, cls) => sum + (cls.attendanceSummary?.attendedClasses || 0), 0);
-    const overallPercentage = totalClasses > 0 ? (totalAttended / totalClasses) * 100 : 0;
-    const criticalClasses = allClasses.filter(cls => cls.attendanceSummary?.isAttendanceCritical).length;
-
-    return (
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Week Header */}
-        <View className="bg-white border-b border-gray-200 px-4 py-4">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-xl font-bold text-gray-800">
-              Week of {formatDate(weekDates[0])} - {formatDate(weekDates[5])}
-            </Text>
-            <TouchableOpacity
-              onPress={() => {
-                // Get the first classroom ID from the schedule
-                const firstClassroom = Object.values(weeklySchedule).flat()[0];
-                if (firstClassroom) {
-                  setEditingClassroomId(firstClassroom.classroomId);
-                  setShowEditModal(true);
-                }
-              }}
-              className="bg-blue-500 px-3 py-2 rounded-lg"
-              activeOpacity={0.7}
-            >
-              <View className="flex-row items-center">
-                <Ionicons name="pencil" size={16} color="white" />
-                <Text className="text-white font-medium ml-1">Edit</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          <View className="flex-row">
-            <View className="w-16" />
-            {DAYS_OF_WEEK.map((day, index) => {
-              const dayClasses = weeklySchedule[day] || [];
-              const hasClasses = dayClasses.length > 0;
-              return (
-                <TouchableOpacity
-                  key={day}
-                  className="flex-1 items-center py-2 rounded-lg"
-                  onPress={() => hasClasses && setSelectedDay(day)}
-                  activeOpacity={hasClasses ? 0.7 : 1}
-                  style={{
-                    backgroundColor: hasClasses ? '#f3f4f6' : 'transparent'
-                  }}
-                >
-                  <Text className="text-sm font-medium text-gray-600">{day.substring(0, 3)}</Text>
-                  <Text className="text-lg font-bold text-gray-800 mt-1">
-                    {formatDate(weekDates[index])}
-                  </Text>
-                  {hasClasses && (
-                    <View className="flex-row mt-1">
-                      {dayClasses.slice(0, 3).map((cls, i) => (
-                        <View
-                          key={i}
-                          className="w-2 h-2 rounded-full mr-1"
-                          style={{ backgroundColor: cls.color }}
-                        />
-                      ))}
-                      {dayClasses.length > 3 && (
-                        <Text className="text-xs text-gray-500">+{dayClasses.length - 3}</Text>
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Overall Stats */}
-        {allClasses.length > 0 && (
-          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 border border-gray-100">
-            <Text className="text-lg font-bold text-gray-800 mb-3">📊 Week Overview</Text>
-            <View className="flex-row justify-between">
-              <View className="items-center">
-                <Text className="text-2xl font-bold text-blue-600">{allClasses.length}</Text>
-                <Text className="text-gray-600 text-xs">Total Classes</Text>
-              </View>
-              <View className="items-center">
-                <Text
-                  className="text-2xl font-bold"
-                  style={{ color: overallPercentage >= 75 ? '#10b981' : '#ef4444' }}
-                >
-                  {overallPercentage.toFixed(1)}%
-                </Text>
-                <Text className="text-gray-600 text-xs">Attendance</Text>
-              </View>
-              <View className="items-center">
-                <Text className="text-2xl font-bold text-red-600">{criticalClasses}</Text>
-                <Text className="text-gray-600 text-xs">Critical</Text>
-              </View>
-              <View className="items-center">
-                <Text className="text-2xl font-bold text-green-600">
-                  {allClasses.filter(cls => cls.todayAttendance === 'present').length}
-                </Text>
-                <Text className="text-gray-600 text-xs">Present Today</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Schedule Grid */}
-        <ScrollView className="flex-1">
-          {TIME_SLOTS.map((timeSlot, timeIndex) => (
-            <View key={timeSlot} className="flex-row border-b border-gray-100">
-              {/* Time Column */}
-              <View className="w-16 p-2 bg-gray-50 border-r border-gray-200 justify-center">
-                <Text className="text-xs font-medium text-gray-600 text-center">
-                  {timeSlot}
-                </Text>
-              </View>
-
-              {/* Days Columns */}
-              {DAYS_OF_WEEK.map((day) => {
-                const classes = getClassesForTimeSlot(day, timeSlot);
-                return (
-                  <View key={day} className="flex-1 min-h-16 border-r border-gray-100">
-                    {classes.map((cls) => (
-                      <TouchableOpacity
-                        key={cls.id}
-                        onPress={() => setSelectedClass(cls)}
-                        className="mx-1 my-1 p-2 rounded-lg shadow-sm relative"
-                        style={{ backgroundColor: cls.color + '20', borderLeftWidth: 4, borderLeftColor: cls.color }}
-                      >
-                        <Text className="text-xs font-semibold text-gray-800" numberOfLines={1}>
-                          {cls.subject}
-                        </Text>
-                        <Text className="text-xs text-gray-600" numberOfLines={1}>
-                          {cls.location}
-                        </Text>
-
-                        {/* Attendance indicator */}
-                        {cls.attendanceSummary && (
-                          <View className="flex-row items-center justify-between mt-1">
-                            <Text
-                              className="text-xs font-bold"
-                              style={{ color: getAttendanceStatusColor(cls) }}
-                            >
-                              {formatAttendancePercentage(cls)}
-                            </Text>
-                            {cls.todayAttendance && (
-                              <View
-                                className="w-2 h-2 rounded-full"
-                                style={{
-                                  backgroundColor: cls.todayAttendance === 'present' ? '#10b981' : '#ef4444'
-                                }}
-                              />
-                            )}
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                );
-              })}
-            </View>
-          ))}
-        </ScrollView>
-      </ScrollView>
-    );
-  };
   const renderClassDetailView = () => {
     if (!selectedClass) return null;
 
@@ -448,14 +364,14 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
                   className="text-3xl font-bold"
                   style={{ color: getAttendanceStatusColor(selectedClass) }}
                 >
-                  {attendanceSummary.attendancePercentage.toFixed(1)}%
+                  {attendanceSummary.currentAttendancePercentage.toFixed(1)}%
                 </Text>
                 <Text className="text-gray-600 text-sm text-center">Current Attendance</Text>
               </View>
 
               <View className="flex-1 items-center">
                 <Text className="text-3xl font-bold text-blue-600">
-                  {attendanceSummary.attendedClasses}/{attendanceSummary.totalClasses}
+                  {attendanceSummary.totalAttendedSoFar}/{attendanceSummary.totalClassesSoFar}
                 </Text>
                 <Text className="text-gray-600 text-sm text-center">Classes Attended</Text>
               </View>
@@ -514,7 +430,7 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
                   <View className="bg-red-500 w-4 h-4 rounded-full mr-3"></View>
                   <Text className="text-gray-700 font-medium">Classes missed</Text>
                 </View>
-                <Text className="text-red-600 font-bold text-xl">{attendanceSummary.absentClasses}</Text>
+                <Text className="text-red-600 font-bold text-xl">{attendanceSummary.totalAbsences}</Text>
               </View>
             </View>
           </View>
@@ -546,56 +462,28 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
             </View>
           </View>
         )}
-
-        {/* Quick Actions */}
-        <View className="bg-white rounded-2xl p-6 border border-gray-100">
-          <Text className="text-xl font-bold text-gray-800 mb-4">⚡ Quick Actions</Text>
-          <TouchableOpacity
-            className="bg-green-500 p-4 rounded-lg mb-3"
-            activeOpacity={0.7}
-          >
-            <View className="flex-row items-center justify-center">
-              <Ionicons name="calendar-outline" size={20} color="white" />
-              <Text className="text-white font-bold ml-2">View Full History</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="bg-green-500 p-4 rounded-lg"
-            activeOpacity={0.7}
-          >
-            <View className="flex-row items-center justify-center">
-              <Ionicons name="stats-chart-outline" size={20} color="white" />
-              <Text className="text-white font-bold ml-2">Generate Report</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     );
   };
 
-  const renderDayView = () => {
-    const dayClasses = weeklySchedule[selectedDay!] || [];
-    const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay!);
-    const dayDate = weekDates[dayIndex];
-
+  const renderCalendarView = () => {
+    // Calculate overall stats
+    const allClasses = Object.values(weeklySchedule).flat();
+    const totalClasses = allClasses.reduce((sum, cls) => sum + (cls.attendanceSummary?.totalClassesSoFar || 0), 0);
+    const totalAttended = allClasses.reduce((sum, cls) => sum + (cls.attendanceSummary?.totalAttendedSoFar || 0), 0);
+    
     return (
-      <ScrollView className="flex-1 p-4" showsVerticalScrollIndicator={false}>
-        {/* Day Header */}
-        <View className="bg-white rounded-2xl p-6 mb-4 border border-gray-100">
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        {/* Week Header */}
+        <View className="bg-white border-b border-gray-200 px-4 py-4">
           <View className="flex-row items-center justify-between mb-2">
-            <TouchableOpacity
-              onPress={() => setSelectedDay(null)}
-              className="flex-row items-center"
-            >
-              <Ionicons name="chevron-back" size={20} color="#6b7280" />
-              <Text className="text-gray-600 ml-1">Back to Week</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            
+            {/* <TouchableOpacity
               onPress={() => {
-                const firstClass = dayClasses[0];
-                if (firstClass) {
-                  setEditingClassroomId(firstClass.classroomId);
+                // Get the first classroom ID from the schedule
+                const firstClassroom = Object.values(weeklySchedule).flat()[0];
+                if (firstClassroom) {
+                  setEditingClassroomId(firstClassroom.classroomId);
                   setShowEditModal(true);
                 }
               }}
@@ -606,90 +494,250 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
                 <Ionicons name="pencil" size={16} color="white" />
                 <Text className="text-white font-medium ml-1">Edit</Text>
               </View>
-            </TouchableOpacity>
-          </View>
-          <Text className="text-2xl font-bold text-gray-800">{selectedDay}</Text>
-          <Text className="text-lg text-gray-600">{formatDate(dayDate)}</Text>
+            </TouchableOpacity> */}
 
-          {/* Day Summary */}
-          {dayClasses.length > 0 && (
-            <View className="mt-4 pt-4 border-t border-gray-100">
-              <View className="flex-row justify-between">
-                <View className="items-center">
-                  <Text className="text-2xl font-bold text-blue-600">{dayClasses.length}</Text>
-                  <Text className="text-gray-600 text-sm">Classes</Text>
-                </View>
-                <View className="items-center">
-                  <Text className="text-2xl font-bold text-green-600">
-                    {dayClasses.filter(cls => cls.todayAttendance === 'present').length}
+          </View>
+          <View className="flex-row">
+            <View className="" />
+            {DAYS_OF_WEEK.map((day, index) => {
+              const dayClasses = weeklySchedule[day] || [];
+              const hasClasses = dayClasses.length > 0;
+              return (
+                <TouchableOpacity
+                  key={day}
+                  className="flex-1 items-center py-2 rounded-lg"
+                  onPress={() => hasClasses && setSelectedDay(day)}
+                  activeOpacity={hasClasses ? 0.7 : 1}
+                  style={{
+                    backgroundColor: hasClasses ? '#f3f4f6' : 'transparent',
+                    marginHorizontal: 2
+                  }}
+                >
+                  <Text className="text-sm font-medium text-gray-600">{day.substring(0, 3)}</Text>
+                  <Text className="text-lg font-bold text-gray-800 mt-1">
+                    {formatDate(weekDates[index])}
                   </Text>
-                  <Text className="text-gray-600 text-sm">Present</Text>
-                </View>
-                <View className="items-center">
-                  <Text className="text-2xl font-bold text-red-600">
-                    {dayClasses.filter(cls => cls.todayAttendance === 'absent').length}
-                  </Text>
-                  <Text className="text-gray-600 text-sm">Absent</Text>
-                </View>
+                  {hasClasses && (
+                    <View className="flex-row mt-1">
+                      {dayClasses.slice(0, 3).map((cls, i) => (
+                        <View
+                          key={i}
+                          className="w-2 h-2 rounded-full mr-1"
+                          style={{ backgroundColor: cls.color }}
+                        />
+                      ))}
+                      {dayClasses.length > 3 && (
+                        <Text className="text-xs text-gray-500">+{dayClasses.length - 3}</Text>
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Overall Stats */}
+        {/* {allClasses.length > 0 && (
+          <View className="bg-white mx-4 mt-4 rounded-2xl p-4 border border-gray-100">
+            <Text className="text-lg font-bold text-gray-800 mb-3">📊 Week Overview</Text>
+            <View className="flex-row justify-between">
+              <View className="items-center">
+                <Text className="text-2xl font-bold text-blue-600">{allClasses.length}</Text>
+                <Text className="text-gray-600 text-xs">Total Classes</Text>
+              </View>
+              <View className="items-center">
+                <Text
+                  className="text-2xl font-bold"
+                  style={{ color: overallPercentage >= 75 ? '#10b981' : '#ef4444' }}
+                >
+                  {overallPercentage.toFixed(1)}%
+                </Text>
+                <Text className="text-gray-600 text-xs">Attendance</Text>
+              </View>
+              <View className="items-center">
+                <Text className="text-2xl font-bold text-red-600">{criticalClasses}</Text>
+                <Text className="text-gray-600 text-xs">Critical</Text>
+              </View>
+              <View className="items-center">
+                <Text className="text-2xl font-bold text-green-600">
+                  {allClasses.filter(cls => cls.todayAttendance === 'present').length}
+                </Text>
+                <Text className="text-gray-600 text-xs">Present Today</Text>
               </View>
             </View>
-          )}
-        </View>
+          </View>
+        )} */}
+
+        {/* Schedule Grid */}
+        <ScrollView className="flex-1">
+          {TIME_SLOTS.map((timeSlot, timeIndex) => (
+            <View key={timeSlot} className="flex-row border-b border-gray-100" style={{ height: 60 }}>
+              {/* Time Column */}
+              <View className="w-16 p-2 bg-gray-50 border-r border-gray-200 justify-start">
+                <Text className="text-xs font-medium text-gray-600 text-center">
+                  {timeSlot}
+                </Text>
+              </View>
+
+              {/* Days Columns */}
+              {DAYS_OF_WEEK.map((day) => {
+                const classes = getClassesForTimeSlot(day, timeSlot);
+                return (
+                  <View key={day} className="flex-1 border-r border-gray-100 relative">
+                    {classes.map((cls, clsIndex) => {
+                      const duration = getClassDuration(cls.startTime, cls.endTime);
+                      const offset = getClassOffset(cls.startTime, timeSlot);
+                      const height = duration; // 1 minute = 1 pixel
+                      
+                      return (
+                        <TouchableOpacity
+                          key={`${day}-${timeSlot}-${cls.id}-${clsIndex}`}
+                          onPress={() => setSelectedClass(cls)}
+                          className="absolute left-0 right-0 mx-1 px-2 py-1 rounded-lg shadow-sm"
+                          style={{ 
+                            backgroundColor: cls.color + '20', 
+                            borderLeftWidth: 4, 
+                            borderLeftColor: cls.color,
+                            top: offset,
+                            height: Math.max(height, 40), // Minimum height of 40px
+                          }}
+                        >
+                          <Text className="text-xs font-semibold text-gray-800" numberOfLines={1}>
+                            {cls.subject}
+                          </Text>
+                          <Text className="text-xs text-gray-500" numberOfLines={1}>
+                            {cls.startTime} - {cls.endTime}
+                          </Text>
+                          <Text className="text-xs text-gray-600" numberOfLines={1}>
+                            {cls.location}
+                          </Text>
+
+                          {/* Attendance indicator */}
+                          {cls.attendanceSummary && height >= 60 && (
+                            <View className="flex-row items-center justify-between mt-1">
+                              <Text
+                                className="text-xs font-bold"
+                                style={{ color: getAttendanceStatusColor(cls) }}
+                              >
+                                {formatAttendancePercentage(cls)}
+                              </Text>
+                              {cls.todayAttendance && (
+                                <View
+                                  className="w-2 h-2 rounded-full"
+                                  style={{
+                                    backgroundColor: cls.todayAttendance === 'present' ? '#10b981' : '#ef4444'
+                                  }}
+                                />
+                              )}
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </ScrollView>
+      </ScrollView>
+    );
+  };
+  
+  const renderDayView = () => {
+    const dayClasses = weeklySchedule[selectedDay!] || [];
+    const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay!);
+    const dayDate = weekDates[dayIndex];
+
+    return (
+      <ScrollView className="flex-1 p-4" showsVerticalScrollIndicator={false}>
+        {/* Day Header */}
+        <View className="bg-white rounded-xl p-4 mb-3 border border-gray-100">
+          <View className="flex-row items-center justify-between mb-2">
+            <TouchableOpacity
+              onPress={() => setSelectedDay(null)}
+              className="flex-row items-center"
+            >
+              <Ionicons name="chevron-back" size={18} color="#6b7280" />
+              <Text className="text-gray-600 ml-1 text-sm">Back</Text>
+            </TouchableOpacity>
+
+            </View>
+            <View className="flex-row items-center justify-between w-full">
+            <View>
+              <Text className="text-xl font-bold text-gray-800">{selectedDay}</Text>
+              <Text className="text-sm text-gray-600">{formatDate(dayDate)}</Text>
+            </View>
+
+            {/* Day Summary */}
+            {dayClasses.length > 0 && (
+              <View className="items-center">
+              <Text className="text-xl font-bold text-blue-600">{dayClasses.length}</Text>
+              <Text className="text-gray-600 text-xs">Classes</Text>
+              </View>
+            )}
+            </View>
+          </View>
+
+
+      
 
         {/* Classes List */}
         {dayClasses.length === 0 ? (
-          <View className="bg-white rounded-2xl p-8 items-center border border-gray-100">
-            <Text className="text-4xl mb-4">📅</Text>
-            <Text className="text-lg font-semibold text-gray-800 mb-2">No Classes Today</Text>
-            <Text className="text-gray-600 text-center">
+          <View className="bg-white rounded-xl p-6 items-center border border-gray-100">
+            <Text className="text-3xl mb-2">📅</Text>
+            <Text className="text-base font-semibold text-gray-800 mb-1">No Classes Today</Text>
+            <Text className="text-gray-600 text-center text-sm">
               Enjoy your free day or use it for self-study!
             </Text>
           </View>
         ) : (
-          <View className="space-y-3">
+          <View className="space-y-2">
             {dayClasses
               .sort((a, b) => a.startTime.localeCompare(b.startTime))
-              .map((cls, index) => (
+              .map((cls) => (
                 <TouchableOpacity
                   key={cls.id}
-                  onPress={() => setSelectedClass(cls)}
-                  className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm"
+                  className="bg-white rounded-xl p-3 border border-gray-100 shadow-sm m-1"
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-start">
                     <View
-                      className="w-1 h-full rounded-full mr-4"
+                      className="w-1 h-full rounded-full mr-3"
                       style={{ backgroundColor: cls.color }}
                     />
                     <View className="flex-1">
-                      <View className="flex-row items-center justify-between mb-2">
-                        <Text className="text-lg font-bold text-gray-800">
+                      <View className="flex-row items-center justify-between mb-1">
+                        <View className="flex-1">
+                          <Text className="text-base font-bold text-gray-800" numberOfLines={1}>
                           {cls.subject}
-                        </Text>
-                        <View className="bg-gray-100 px-3 py-1 rounded-full">
-                          <Text className="text-sm font-medium text-gray-600">
-                            {cls.startTime} - {cls.endTime}
+                          </Text>
+                        </View>
+                        <View className="bg-gray-100 px-2 py-1 rounded-full">
+                          <Text className="text-xs font-medium text-gray-600">
+                          {cls.startTime} - {cls.endTime}
                           </Text>
                         </View>
                       </View>
 
-                      <View className="flex-row items-center mb-2">
-                        <Ionicons name="person-outline" size={16} color="#6b7280" />
-                        <Text className="text-gray-600 ml-2">{cls.instructor}</Text>
+                      <View className="flex-row items-center mb-1">
+                        <Ionicons name="person-outline" size={14} color="#6b7280" />
+                        <Text className="text-gray-600 ml-2 text-sm">{cls.instructor}</Text>
                       </View>
 
-                      <View className="flex-row items-center mb-3">
-                        <Ionicons name="location-outline" size={16} color="#6b7280" />
-                        <Text className="text-gray-600 ml-2">{cls.location}</Text>
+                      <View className="flex-row items-center mb-2">
+                        <Ionicons name="location-outline" size={14} color="#6b7280" />
+                        <Text className="text-gray-600 ml-2 text-sm">{cls.location}</Text>
                       </View>
 
                       {/* Attendance Info */}
                       {cls.attendanceSummary && (
-                        <View className="bg-gray-50 rounded-lg p-3">
-                          <View className="flex-row items-center justify-between mb-2">
-                            <Text className="text-sm font-medium text-gray-700">Attendance</Text>
+                        <View className="bg-gray-50 rounded-lg p-2">
+                          <View className="flex-row items-center justify-between mb-1">
+                            <Text className="text-xs font-medium text-gray-700">Attendance</Text>
                             <Text
-                              className="text-sm font-bold"
+                              className="text-xs font-bold"
                               style={{ color: getAttendanceStatusColor(cls) }}
                             >
                               {formatAttendancePercentage(cls)}
@@ -697,8 +745,8 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
                           </View>
 
                           <View className="flex-row justify-between text-xs">
-                            <Text className="text-gray-600">
-                              {cls.attendanceSummary.attendedClasses}/{cls.attendanceSummary.totalClasses} classes
+                            <Text className="text-gray-600 text-xs">
+                              {cls.attendanceSummary.totalAttendedSoFar}/{cls.attendanceSummary.totalClassesSoFar} classes
                             </Text>
                             {cls.todayAttendance && (
                               <View className="flex-row items-center">
@@ -790,7 +838,7 @@ export const WeeklyScheduleCalendar: React.FC<WeeklyScheduleCalendarProps> = ({
           <View className="bg-white border-b border-gray-200 pt-12 pb-4 px-4">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center">
-                <Text className="text-2xl mr-2">📅</Text>
+        
                 <Text className="text-xl font-bold text-gray-800">
                   {selectedClass ? selectedClass.subject :
                     selectedDay ? `${selectedDay} Schedule` : 'Weekly Schedule'}

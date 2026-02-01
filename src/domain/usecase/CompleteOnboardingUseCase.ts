@@ -1,4 +1,5 @@
-import { OnboardingError, StringUtils } from '@/src/core';
+import { OnboardingError } from '../../core/errors/AppError';
+import { StringUtils } from '../../core/utils/StringUtils';
 import { FirebaseUserService } from '../../data/services/UserService';
 import { ClassSchedule } from '../model/Classroom';
 import { AuthResult } from '../model/User';

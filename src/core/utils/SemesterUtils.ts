@@ -50,7 +50,7 @@ export const isWorkingDay = (date: Date): boolean => {
 };
 
 /**
- * Parse date string in DD/MM/YYYY format or ISO format to Date object
+ * Parse date string in DD/MM/YYYY, DDMMYYYY, or ISO format to Date object
  */
 export const parseDate = (dateString: string): Date | null => {
   if (!dateString) return null;
@@ -63,17 +63,30 @@ export const parseDate = (dateString: string): Date | null => {
     }
   }
   
-  // Try to parse as DD/MM/YYYY format
+  // Try to parse as DDMMYYYY format (8 digits without separators)
+  if (dateString.length === 8 && /^\d{8}$/.test(dateString)) {
+    const day = parseInt(dateString.substring(0, 2), 10);
+    const month = parseInt(dateString.substring(2, 4), 10) - 1; // Month is 0-indexed in JS Date
+    const year = parseInt(dateString.substring(4, 8), 10);
+    
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    
+    return new Date(year, month, day);
+  }
+  
+  // Try to parse as DD/MM/YYYY format with slashes
   const parts = dateString.split('/');
-  if (parts.length !== 3) return null;
+  if (parts.length === 3) {
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed in JS Date
+    const year = parseInt(parts[2], 10);
+    
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    
+    return new Date(year, month, day);
+  }
   
-  const day = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed in JS Date
-  const year = parseInt(parts[2], 10);
-  
-  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-  
-  return new Date(year, month, day);
+  return null;
 };
 
 /**
@@ -230,6 +243,45 @@ export const calculateAttendanceWithPreRegistration = (
   
   const today = new Date();
   const registrationDate = parseDate(userRegistrationDate);
+  const semesterStart = typeof semesterStartDate === 'string' ? parseDate(semesterStartDate) : semesterStartDate;
+  const semesterEnd = typeof semesterEndDate === 'string' ? parseDate(semesterEndDate) : semesterEndDate;
+  
+  // Check if semester is in the past (user registered after semester ended)
+  if (registrationDate && semesterEnd && registrationDate > semesterEnd) {
+    console.warn('⚠️ User registered after semester ended. Semester is in the past.');
+    return {
+      requiredDays: 0,
+      canSkipDays: 0,
+      isOnTrack: true,
+      currentPerformancePercentage: 0,
+      remainingWorkingDays: 0,
+      targetDaysForSemester: 0,
+      projectedFinalPercentage: 0,
+      preRegistrationDays: 0,
+      postRegistrationDays: 0,
+      assumedPreRegistrationAttendance: 0,
+      actualPostRegistrationPerformance: 0
+    };
+  }
+  
+  // Check if semester hasn't started yet
+  if (registrationDate && semesterStart && today < semesterStart) {
+    console.warn('⚠️ Semester has not started yet.');
+    const totalSemesterWorkingDays = calculateSemesterWorkingDays(semesterStartDate, semesterEndDate);
+    return {
+      requiredDays: Math.ceil((targetPercentage / 100) * totalSemesterWorkingDays),
+      canSkipDays: 0,
+      isOnTrack: true,
+      currentPerformancePercentage: 0,
+      remainingWorkingDays: totalSemesterWorkingDays,
+      targetDaysForSemester: Math.ceil((targetPercentage / 100) * totalSemesterWorkingDays),
+      projectedFinalPercentage: 0,
+      preRegistrationDays: 0,
+      postRegistrationDays: 0,
+      assumedPreRegistrationAttendance: 0,
+      actualPostRegistrationPerformance: 0
+    };
+  }
   
   if (!registrationDate) {
     console.error('Invalid registration date, falling back to simple calculation');

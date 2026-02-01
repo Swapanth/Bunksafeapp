@@ -77,10 +77,11 @@ export class ErrorHandler {
         return new NetworkError(error.message, error);
       }
 
-      return new AppError(error.message, error) as any;
+      // Return a generic FirebaseError instead of AppError
+      return new FirebaseError(error.message, error);
     }
 
-    return new AppError('An unknown error occurred') as any;
+    return new FirebaseError('An unknown error occurred');
   }
 
   static getDisplayMessage(error: AppError): string {

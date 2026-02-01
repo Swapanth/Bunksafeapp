@@ -387,7 +387,7 @@ export const OTPVerificationScreen: React.FC<OTPVerificationScreenProps> = ({
       <RecaptchaModal
         visible={showRecaptcha}
         onSuccess={handleRecaptchaSuccess}
-        onCancel={hideRecaptchaModal}
+        onClose={hideRecaptchaModal}
         onError={handleRecaptchaError}
       />
     </View>

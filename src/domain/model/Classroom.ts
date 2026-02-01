@@ -32,6 +32,7 @@ export interface Schedule {
 }
 
 export interface ClassSchedule {
+  code: string;
   subject: any;
   id: string;
   name: string;

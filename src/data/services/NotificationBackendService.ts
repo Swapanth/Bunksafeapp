@@ -1,16 +1,16 @@
 import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    limit,
+    orderBy,
+    query,
+    setDoc,
+    Timestamp,
+    updateDoc,
+    where
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { NotificationTemplate, TaskNotificationData } from '../../core/constants/NotificationTemplates';
@@ -37,6 +37,7 @@ export interface UserNotificationSettings {
   deadlineReminders: boolean;
   dailyReminders: boolean;
   weeklyReports: boolean;
+  messageNotifications: boolean;
   reminderHour: number;
   reminderMinute: number;
   createdAt: Date;
@@ -67,6 +68,7 @@ export class NotificationBackendService {
         taskCompleted: settings.taskCompleted ?? true,
         deadlineReminders: settings.deadlineReminders ?? true,
         dailyReminders: settings.dailyReminders ?? true,
+        messageNotifications: settings.messageNotifications ?? true,
         weeklyReports: settings.weeklyReports ?? true,
         reminderHour: settings.reminderHour ?? 9,
         reminderMinute: settings.reminderMinute ?? 0,
@@ -229,6 +231,93 @@ export class NotificationBackendService {
   }
   
 
+  // Message notification trigger
+  async triggerMessageNotification(
+    recipientUserId: string,
+    senderName: string,
+    messageContent: string,
+    conversationId: string
+  ): Promise<void> {
+    try {
+      console.log('🔔 Triggering message notification for:', recipientUserId);
+      
+      const settings = await this.getUserNotificationSettings(recipientUserId);
+      
+      if (!settings) {
+        console.log('⚠️ No settings found for user, creating defaults with message notifications enabled');
+        // Create default settings if they don't exist
+        await this.saveUserNotificationSettings({
+          userId: recipientUserId,
+          messageNotifications: true,
+          taskCreated: true,
+          taskCompleted: true,
+          deadlineReminders: true,
+          dailyReminders: true,
+          weeklyReports: true,
+          reminderHour: 9,
+          reminderMinute: 0,
+        });
+        // Re-fetch settings
+        const newSettings = await this.getUserNotificationSettings(recipientUserId);
+        if (!newSettings?.expoPushToken) {
+          console.log('⚠️ No push token found for user after creating settings');
+          return;
+        }
+      }
+      
+      // Check if user has message notifications enabled (default true if not set)
+      const messageNotificationsEnabled = settings?.messageNotifications ?? true;
+      console.log('📱 Message notifications enabled:', messageNotificationsEnabled);
+      
+      if (!messageNotificationsEnabled) {
+        console.log('🔕 Message notifications disabled for user:', recipientUserId);
+        return;
+      }
+
+      // Check if user has a push token
+      if (!settings?.expoPushToken) {
+        console.log('⚠️ No push token found for user:', recipientUserId);
+        return;
+      }
+
+      console.log('✅ Push token found:', settings.expoPushToken.substring(0, 20) + '...');
+
+      // Create notification template
+      const template = {
+        id: 'new_message',
+        title: senderName,
+        body: messageContent.length > 100 ? messageContent.substring(0, 97) + '...' : messageContent,
+        data: {
+          type: 'new_message',
+          conversationId: conversationId,
+          senderId: senderName,
+        },
+      };
+
+      console.log('📤 Sending push notification:', template.title, '-', template.body);
+
+      // Try to save notification record
+      try {
+        await this.saveNotificationRecord(recipientUserId, template);
+      } catch (saveError) {
+        console.warn('Could not save notification record, but continuing:', saveError);
+      }
+
+      // Skip push notification on web platform (CORS restriction)
+      if (typeof window !== 'undefined' && window.location) {
+        console.log('ℹ️ Skipping push notification on web platform (use native app for push notifications)');
+        return;
+      }
+
+      // Send push notification (only works on native apps or from backend)
+      await this.sendPushNotificationToUser(settings.expoPushToken, template);
+      console.log('✅ Message notification sent successfully to:', recipientUserId);
+    } catch (error) {
+      console.error('❌ Failed to trigger message notification:', error);
+      // Don't throw to prevent breaking message sending flow
+    }
+  }
+
   // Task-specific notification triggers
   async triggerTaskCreatedNotification(
     userId: string,
@@ -358,6 +447,12 @@ export class NotificationBackendService {
     };
 
     try {
+      console.log('📤 Sending push to Expo:', { 
+        to: expoPushToken.substring(0, 20) + '...', 
+        title: template.title,
+        body: template.body.substring(0, 50) + '...'
+      });
+      
       const response = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: {
@@ -369,9 +464,16 @@ export class NotificationBackendService {
       });
 
       const result = await response.json();
-      console.log('Push notification sent:', result);
+      
+      if (response.ok) {
+        console.log('✅ Push notification sent successfully:', result);
+      } else {
+        console.error('❌ Push notification failed:', result);
+      }
+      
+      return result;
     } catch (error) {
-      console.error('Failed to send push notification:', error);
+      console.error('❌ Failed to send push notification:', error);
       throw error;
     }
   }

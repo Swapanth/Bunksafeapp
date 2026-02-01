@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
     Alert,
+    Animated,
     Image,
     ScrollView,
     StatusBar,
@@ -66,20 +67,45 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const ToggleSwitch: React.FC<{
     value: boolean;
     onToggle: (value: boolean) => void;
-  }> = ({ value, onToggle }) => (
-    <TouchableOpacity
-      onPress={() => onToggle(!value)}
-      className={`w-12 h-6 rounded-full p-1 ${
-        value ? 'bg-green-500' : 'bg-gray-300'
-      }`}
-    >
-      <View
-        className={`w-4 h-4 rounded-full bg-white transform ${
-          value ? 'translate-x-6' : 'translate-x-0'
-        } transition-transform duration-200`}
-      />
-    </TouchableOpacity>
-  );
+  }> = ({ value, onToggle }) => {
+    const [animation] = React.useState(new Animated.Value(value ? 1 : 0));
+
+    React.useEffect(() => {
+      Animated.timing(animation, {
+        toValue: value ? 1 : 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }, [value]);
+
+    const translateX = animation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 24],
+    });
+
+    return (
+      <TouchableOpacity
+        onPress={() => onToggle(!value)}
+        style={{
+          width: 48,
+          height: 24,
+          borderRadius: 12,
+          padding: 4,
+          backgroundColor: value ? '#10b981' : '#d1d5db',
+        }}
+      >
+        <Animated.View
+          style={{
+            width: 16,
+            height: 16,
+            borderRadius: 8,
+            backgroundColor: '#ffffff',
+            transform: [{ translateX }],
+          }}
+        />
+      </TouchableOpacity>
+    );
+  };
 
   const VisibilityOption: React.FC<{
     title: string;

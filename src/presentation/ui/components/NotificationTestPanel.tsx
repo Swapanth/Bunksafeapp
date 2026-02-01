@@ -1,8 +1,8 @@
 import React from 'react';
-import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { NotificationTemplates, TaskNotificationData } from '../../../core/constants/NotificationTemplates';
 import { AppNotificationInitializer } from '../../../core/services/AppNotificationInitializer';
-import { NotificationService } from '../../../data/services/NotificationClientService';
+import { NotificationClientService } from '../../../data/services/NotificationClientService';
 
 interface NotificationTestPanelProps {
   userId: string;
@@ -13,7 +13,7 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
   userId,
   onClose,
 }) => {
-  const notificationService = NotificationService.getInstance();
+  const notificationService = NotificationClientService.getInstance();
   const notificationInitializer = AppNotificationInitializer.getInstance();
 
   const testTaskData: TaskNotificationData = {
@@ -131,7 +131,8 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
         {/* Notification Status */}
         <View className="mb-6">
           <Text className="text-lg font-semibold mb-3">System Status</Text>
-          <NotificationStatus userId={userId} showDetails={true} />
+          {/* <NotificationStatus userId={userId} showDetails={true} /> */}
+          <Text className="text-gray-500">Status component temporarily unavailable</Text>
         </View>
 
         {/* Test Buttons */}

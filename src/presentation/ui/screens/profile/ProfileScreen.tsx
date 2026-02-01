@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { EditProfileModal } from '../../components/EditProfileModal';
-import { AppInfo, ProfileDataService, SettingsSection as SettingsSectionType, ToggleSetting, useProfileData, UserProfile } from './useProfileData';
 import { ProfileSkeleton } from '../../components/skeletons/ProfileSkeleton';
+import { AppInfo, ProfileDataService, SettingsSection as SettingsSectionType, ToggleSetting, useProfileData, UserProfile } from './useProfileData';
 
 interface ProfileScreenProps {
   service?: ProfileDataService;
@@ -38,9 +38,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     );
   }
 
-  // Loading state
-  if (loading || !user) {
+  // Loading state - show skeleton only if no user data yet
+  if (loading && !user) {
     return <ProfileSkeleton />;
+  }
+
+  // If we don't have user data after loading, show a placeholder
+  if (!user) {
+    return (
+      <View className="flex-1 justify-center items-center px-6" style={{ backgroundColor: '#fafafa' }}>
+        <Text className="text-gray-600 text-center">Loading profile...</Text>
+      </View>
+    );
   }
 
   return (
@@ -53,10 +62,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             onEditProfile={() => setShowEditModal(true)}
           />
 
-          {/* Quick Toggle Settings */}
+          {/* Quick Toggle Settings
           {toggleSettings.length > 0 && (
             <QuickSettingsCard toggleSettings={toggleSettings} />
-          )}
+          )} */}
 
           {/* Settings Sections */}
           {settingSections.map((section) => (
@@ -96,9 +105,9 @@ const ProfileCard: React.FC<{
 }> = ({ user, onEditProfile }) => (
   <View className="bg-white rounded-3xl p-6 mb-6 border border-gray-100">
     <View className="flex-row items-center mb-4">
-      <TouchableOpacity onPress={onEditProfile}>
+      {/* <TouchableOpacity onPress={onEditProfile}>
         <Text className="text-5xl mr-4">{user.avatar}</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
       <View className="flex-1">
         <View className="flex-row items-center mb-1">
           <Text className="text-xl font-bold text-gray-800 mr-2">
@@ -122,7 +131,7 @@ const ProfileCard: React.FC<{
       )}
     </View>
 
-    <View className="flex-row justify-between pt-4 border-t border-gray-100">
+    {/* <View className="flex-row justify-between pt-4 border-t border-gray-100">
       <View className="items-center flex-1">
         <Text className="text-2xl font-bold text-orange-600">
           🔥 {user.studyStreak}
@@ -137,7 +146,7 @@ const ProfileCard: React.FC<{
         <Text className="text-2xl font-bold text-green-600">{user.stats.progress}</Text>
         <Text className="text-gray-600 text-sm">Progress</Text>
       </View>
-    </View>
+    </View> */}
   </View>
 );
 
@@ -281,12 +290,40 @@ const LogoutButton: React.FC<{ onLogout: () => void }> = ({ onLogout }) => (
 
 // App Version Info Component
 const AppVersionInfo: React.FC<{ appInfo: AppInfo }> = ({ appInfo }) => (
-  <View className="items-center">
-    <Text className="text-gray-500 text-sm">
+  <View className="items-center pb-6">
+    {/* <Text className="text-gray-500 text-sm font-medium">
       BunkSafe Mobile {appInfo.version}
     </Text>
     <Text className="text-gray-400 text-xs mt-1">
       {appInfo.tagline}
     </Text>
+     */}
+    {/* Divider */}
+    {/* <View className="w-16 h-px bg-gray-300 my-4" /> */}
+    
+    {/* Developer Info Card */}
+    <View className="bg-white rounded-2xl px-6 py-4 border border-gray-100 mt-2" 
+      style={{
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+      }}>
+      <Text className="text-gray-400 text-xs text-center mb-2">
+        Built with ❤️ for students
+      </Text>
+      <View className="flex-row items-center justify-center mt-1">
+        <Text className="text-gray-600 text-xs font-medium ml-1">
+          Swapanth Vakapalli
+        </Text>
+      </View>
+      <View className="flex-row items-center justify-center mt-1">
+        <Ionicons name="mail-outline" size={12} color="#9ca3af" />
+        <Text className="text-gray-500 text-xs ml-1">
+          swapanthvakapalli@gmail.com
+        </Text>
+      </View>
+    </View>
   </View>
 );

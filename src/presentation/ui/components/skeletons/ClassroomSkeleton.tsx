@@ -16,14 +16,14 @@ export const ClassroomSkeleton: React.FC = () => {
 
           {/* Classroom List Skeleton */}
           <View className="space-y-4">
-            {[1, 2].map((item) => (
-              <View key={item} className="bg-white rounded-2xl p-5 border border-gray-100">
+            
+              <View className="bg-white rounded-2xl p-5 border border-gray-100">
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center flex-1">
                     <SkeletonLoader width={48} height={48} borderRadius={24} style={{ marginRight: 16 }} />
                     <View className="flex-1">
-                      <SkeletonLoader width={140} height={18} style={{ marginBottom: 4 }} />
-                      <SkeletonLoader width={200} height={14} style={{ marginBottom: 8 }} />
+                      <SkeletonLoader width={120} height={18} style={{ marginBottom: 4 }} />
+                      <SkeletonLoader width={160} height={14} style={{ marginBottom: 8 }} />
                       <SkeletonLoader width={80} height={20} borderRadius={10} />
                     </View>
                   </View>
@@ -35,7 +35,7 @@ export const ClassroomSkeleton: React.FC = () => {
                   </View>
                 </View>
               </View>
-            ))}
+           
           </View>
         </View>
 

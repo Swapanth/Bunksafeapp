@@ -1,8 +1,19 @@
 import { DashboardData, TodaysClass } from '@/src/domain/model/Attendance';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { Alert, Modal, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, InteractionManager, Modal, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FirebaseAttendanceService } from '../../../../data/services/AttendanceService';
+import { dataCache } from '../../../utils/DataCache';
 import { DashboardSkeleton } from '../../components/skeletons/DashboardSkeleton';
+
+// Pre-instantiate service outside component to avoid recreation
+let attendanceServiceInstance: FirebaseAttendanceService | null = null;
+const getAttendanceService = () => {
+  if (!attendanceServiceInstance) {
+    attendanceServiceInstance = new FirebaseAttendanceService();
+  }
+  return attendanceServiceInstance;
+};
 
 
 interface DashboardScreenProps {
@@ -14,8 +25,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   userId,
   onNavigateToClassroom
 }) => {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `dashboard_${userId}`;
+  const cachedData = dataCache.get<DashboardData>(cacheKey);
+  
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(cachedData);
+  const [loading, setLoading] = useState(false); // Start false for instant render
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +45,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [semesterStartDate, setSemesterStartDate] = useState('');
   const [semesterEndDate, setSemesterEndDate] = useState('');
 
+  // Use ref to track if component is mounted
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Load dashboard data on component mount
   const loadDashboardData = React.useCallback(async (isRefresh = false) => {
     try {
@@ -41,19 +65,45 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       }
       setError(null);
 
-      const { FirebaseAttendanceService } = await import('../../../../data/services/FirebaseAttendanceService');
-      const attendanceService = new FirebaseAttendanceService();
+      const attendanceService = getAttendanceService();
 
-      const data = await attendanceService.getDashboardData(userId);
+      console.log('📊 Loading dashboard for user:', userId);
+      
+      // Run auto-mark and data fetch in parallel for faster loading
+      const [, data] = await Promise.all([
+        attendanceService.autoMarkUnmarkedAsAbsent(userId).catch(err => {
+          console.warn('⚠️ Auto-mark failed (non-critical):', err);
+          return null; // Don't block loading if this fails
+        }),
+        attendanceService.getDashboardData(userId)
+      ]);
+
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
 
       if (data) {
+        console.log('✅ Dashboard data loaded successfully');
         setDashboardData(data);
+        
+        // Cache the data for 3 minutes (dashboard updates frequently)
+        dataCache.set(cacheKey, data, 3 * 60 * 1000);
       } else {
-        setError('Failed to load dashboard data');
+        console.error('❌ getDashboardData returned null');
+        const errorMsg = 'Failed to load dashboard data - service returned null';
+        setError(errorMsg);
+        Alert.alert('Debug Info', `Dashboard data is null for user: ${userId}`);
       }
     } catch (err) {
-      console.error('Error loading dashboard data:', err);
-      setError('Failed to load dashboard data');
+      console.error('❌ Error loading dashboard data:', err);
+      if (err instanceof Error) {
+        console.error('Error details:', err.message);
+        const errorMsg = `Failed to load dashboard: ${err.message}`;
+        setError(errorMsg);
+        Alert.alert('Dashboard Error', `${err.message}\n\nUser: ${userId}`);
+      } else {
+        setError('Failed to load dashboard data');
+        Alert.alert('Dashboard Error', 'Unknown error occurred');
+      }
     } finally {
       if (isRefresh) {
         setRefreshing(false);
@@ -64,8 +114,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   }, [userId]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    // Only load if we don't have cached data
+    if (!cachedData) {
+      // Defer loading until after screen renders for instant UI
+      const task = InteractionManager.runAfterInteractions(() => {
+        setLoading(true);
+        loadDashboardData();
+      });
+
+      return () => task.cancel();
+    }
+  }, [loadDashboardData, cachedData]);
 
   const onRefresh = () => {
     loadDashboardData(true);
@@ -76,15 +135,28 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
 
   const calculateAttendanceDetails = (classItem: TodaysClass) => {
-    const { totalClasses = 0, attendedClasses = 0, requiredAttendancePercentage = 75 } = classItem;
-    const currentAttendancePercentage = totalClasses > 0 ? (attendedClasses / totalClasses) * 100 : 0;
+    const { 
+      totalClasses = 0, 
+      attendedClasses = 0, 
+      requiredAttendancePercentage = 75,
+      TotalClassesForSemester = 0
+    } = classItem;
 
-    // Calculate classes needed to attend to maintain required percentage
-    const requiredAttendedClasses = Math.ceil((requiredAttendancePercentage / 100) * totalClasses);
-    const classesToAttend = Math.max(0, requiredAttendedClasses - attendedClasses);
+    // Calculate current attendance
+    const currentAttendancePercentage = totalClasses > 0 
+      ? (attendedClasses / totalClasses) * 100 
+      : 0;
 
-    // Calculate classes that can be skipped while maintaining required percentage
-    const maxAllowedAbsences = totalClasses - requiredAttendedClasses;
+    // Use expected total classes for semester, or fallback to classes so far
+    const totalExpectedClasses = TotalClassesForSemester || totalClasses;
+    const remainingClasses = Math.max(0, totalExpectedClasses - totalClasses);
+
+    // Calculate how many classes need to attend to reach required percentage
+    const requiredTotalAttended = Math.ceil((requiredAttendancePercentage / 100) * totalExpectedClasses);
+    const classesToAttend = Math.max(0, requiredTotalAttended - attendedClasses);
+
+    // Calculate how many classes can be skipped
+    const maxAllowedAbsences = totalExpectedClasses - requiredTotalAttended;
     const currentAbsences = totalClasses - attendedClasses;
     const classesCanSkip = Math.max(0, maxAllowedAbsences - currentAbsences);
 
@@ -92,6 +164,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       currentAttendancePercentage: Math.round(currentAttendancePercentage * 100) / 100,
       classesToAttend,
       classesCanSkip,
+      remainingClasses,
+      totalClassesSoFar: totalClasses,
+      totalAttendedSoFar: attendedClasses,
       isAttendanceCritical: currentAttendancePercentage < requiredAttendancePercentage
     };
   };
@@ -126,7 +201,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   const handleCheckIn = async (classItem: TodaysClass, attended: boolean, reason?: string) => {
     try {
-      const { FirebaseAttendanceService } = await import('../../../../data/services/FirebaseAttendanceService');
+      const { FirebaseAttendanceService } = await import('../../../../data/services/AttendanceService');
       const attendanceService = new FirebaseAttendanceService();
 
       const result = await attendanceService.markAttendance(
@@ -134,11 +209,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         classItem.classroomId,
         classItem.classId,
         attended ? 'present' : 'absent',
-        reason
+        reason,
+        classItem.subject
       );
 
       if (result.success) {
-        // Update local state
+        // Fetch updated streak from database (regardless of present/absent)
+        const updatedStreak = await attendanceService.getAttendanceStreak(userId);
+        if (updatedStreak && dashboardData) {
+          setDashboardData(prev => prev ? { ...prev, attendanceStreak: updatedStreak } : null);
+        }
+
+        // Update local state for checked-in classes
         if (dashboardData) {
           const updatedClasses = dashboardData.todaysClasses.map(item =>
             item.id === classItem.id
@@ -155,7 +237,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         }
 
         if (attended) {
-          updateAttendanceStreak(true);
           Alert.alert('✅ Checked In', `You've marked attendance for ${classItem.subject}!`);
         } else {
           Alert.alert('📝 Absence Noted', `Your absence for ${classItem.subject} has been recorded.`);
@@ -200,7 +281,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       // Mark as present
       if (selectedClass) {
         try {
-          const { FirebaseAttendanceService } = await import('../../../../data/services/FirebaseAttendanceService');
+          const { FirebaseAttendanceService } = await import('../../../../data/services/AttendanceService');
           const attendanceService = new FirebaseAttendanceService();
 
           const today = getCurrentDate();
@@ -212,6 +293,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           );
 
           if (result.success) {
+            // Fetch updated streak from database
+            const updatedStreak = await attendanceService.getAttendanceStreak(userId);
+            if (updatedStreak && dashboardData) {
+              setDashboardData(prev => prev ? { ...prev, attendanceStreak: updatedStreak } : null);
+            }
+
             // Update local state
             if (dashboardData) {
               const updatedClasses = dashboardData.todaysClasses.map(item =>
@@ -242,7 +329,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const submitEdit = async () => {
     if (selectedClass && editMode === 'absent' && absentReason.trim()) {
       try {
-        const { FirebaseAttendanceService } = await import('../../../../data/services/FirebaseAttendanceService');
+        const { FirebaseAttendanceService } = await import('../../../../data/services/AttendanceService');
         const attendanceService = new FirebaseAttendanceService();
 
         const today = getCurrentDate();
@@ -255,6 +342,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         );
 
         if (result.success) {
+          // Fetch updated streak from database
+          const updatedStreak = await attendanceService.getAttendanceStreak(userId);
+          if (updatedStreak && dashboardData) {
+            setDashboardData(prev => prev ? { ...prev, attendanceStreak: updatedStreak } : null);
+          }
+
           // Update local state
           if (dashboardData) {
             const updatedClasses = dashboardData.todaysClasses.map(item =>
@@ -524,7 +617,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </View>
               ) : (
                 dashboardData.todaysClasses.map((classItem, index) => (
-                  <View key={classItem.id} className={`flex-row items-center p-4 rounded-2xl border ${index < dashboardData.todaysClasses.length - 1 ? 'mb-2' : ''} ${classItem.subject === 'Mathematics' ? 'bg-green-50 border-green-100' :
+                  <View key={`${classItem.id}_${classItem.subject}_${index}`} className={`flex-row items-center p-4 rounded-2xl border ${index < dashboardData.todaysClasses.length - 1 ? 'mb-2' : ''} ${classItem.subject === 'Mathematics' ? 'bg-green-50 border-green-100' :
                     classItem.subject === 'Physics' ? 'bg-purple-50 border-purple-100' :
                       'bg-green-50 border-green-100'
                     }`}>
@@ -765,7 +858,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                           <View className="flex-1 items-center">
                             <Text className="text-2xl font-bold text-green-600">
-                              {selectedClass.attendedClasses || 0}/{selectedClass.totalClasses || 0}
+                              {details.totalAttendedSoFar}/{details.totalClassesSoFar}
                             </Text>
                             <Text className="text-gray-600 text-sm text-center">Classes Attended</Text>
                           </View>

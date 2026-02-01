@@ -1,13 +1,30 @@
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import { FirebaseAttendanceService } from "./AttendanceService";
 import { FirebaseClassroomService } from "./ClassroomService";
-import { FirebaseAttendanceService } from "./FirebaseAttendanceService";
 
 export interface ClassroomAnalytics {
   weeklyPerformance: WeeklyPerformanceData[];
   subjectDistribution: SubjectDistributionData[];
   weeklyStats: WeeklyStatsData[];
   classroomOverview: ClassroomOverviewData[];
+  subjects: SubjectData[];
+}
+
+export interface SubjectData {
+  name: string;
+  code: string;
+  icon: string;
+  color: string;
+  totalClasses: number;
+  attendedClasses: number;
+  attendance: number;
+  classroomId: string;
+  classroomName: string;
+  classId: string;
+  targetPercentage: number;
+  classesToAttend?: number;
+  classesCanSkip?: number;
 }
 
 export interface WeeklyPerformanceData {
@@ -74,12 +91,14 @@ export class FirebaseClassroomAnalyticsService {
         userId,
         classrooms
       );
+      const subjects = await this.getSubjectsData(userId, classrooms);
 
       return {
         weeklyPerformance,
         subjectDistribution,
         weeklyStats,
         classroomOverview,
+        subjects,
       };
     } catch (error) {
       console.error("Error getting classroom analytics:", error);
@@ -299,6 +318,153 @@ export class FirebaseClassroomAnalyticsService {
       console.error("Error getting classroom overview data:", error);
       return this.getDefaultClassroomOverview();
     }
+  }async getSubjectsData(
+    userId: string,
+    classrooms: any[]
+  ): Promise<SubjectData[]> {
+    try {
+      const subjectMap = new Map<string, SubjectData>();
+      const colors = [
+        "#3b82f6",
+        "#10b981",
+        "#f59e0b",
+        "#ef4444",
+        "#8b5cf6",
+        "#06b6d4",
+        "#84cc16",
+        "#ec4899",
+        "#14b8a6",
+      ];
+      const icons = [
+        "calculator-outline",
+        "flask-outline",
+        "book-outline",
+        "globe-outline",
+        "code-slash-outline",
+        "analytics-outline",
+        "musical-notes-outline",
+        "brush-outline",
+        "school-outline",
+      ];
+
+      let colorIndex = 0;
+
+      // Get all schedules for user's classrooms
+      for (const classroom of classrooms) {
+        if (!classroom.id) continue;
+
+        const schedule = await this.classroomService.getClassroomSchedule(
+          classroom.id
+        );
+        
+        if (schedule && schedule.classes) {
+          for (const classItem of schedule.classes) {
+            const subject = classItem.name || classItem.subject;
+            if (!subject) continue;
+
+            const subjectKey = `${subject}-${classroom.id}`;
+
+            if (!subjectMap.has(subjectKey)) {
+              // Try to get cached stats first for better performance
+              const cachedStats = await this.attendanceService.getAttendanceStatsFromCache(
+                userId,
+                classItem.id
+              );
+
+              let totalClasses = 0;
+              let presentClasses = 0;
+              let attendancePercentage = 0;
+
+              if (cachedStats) {
+                // Use cached data (fast)
+                totalClasses = cachedStats.totalClasses;
+                presentClasses = cachedStats.attendedClasses;
+                attendancePercentage = Math.round(cachedStats.attendancePercentage);
+              } else {
+                // Fallback to querying (slower, but ensures data exists)
+                const attendanceQuery = query(
+                  collection(db, "attendance"),
+                  where("userId", "==", userId),
+                  where("classroomId", "==", classroom.id),
+                  where("classId", "==", classItem.id)
+                );
+
+                const attendanceSnapshot = await getDocs(attendanceQuery);
+                totalClasses = attendanceSnapshot.size;
+                presentClasses = attendanceSnapshot.docs.filter(
+                  (doc) => doc.data().status === "present"
+                ).length;
+
+                attendancePercentage =
+                  totalClasses > 0
+                    ? Math.round((presentClasses / totalClasses) * 100)
+                    : 0;
+              }
+
+              // Calculate future planning metrics
+              const targetPercentage = classroom.attendanceTarget || 75;
+              let classesToAttend: number | undefined;
+              let classesCanSkip: number | undefined;
+
+              if (totalClasses > 0) {
+                const currentPercentage = (presentClasses / totalClasses) * 100;
+                
+                if (currentPercentage < targetPercentage) {
+                  // Calculate how many consecutive classes need to be attended to reach target
+                  // Formula: (presentClasses + x) / (totalClasses + x) = targetPercentage / 100
+                  // Solving: x = (targetPercentage * totalClasses - 100 * presentClasses) / (100 - targetPercentage)
+                  const numerator = (targetPercentage * totalClasses) - (100 * presentClasses);
+                  const denominator = 100 - targetPercentage;
+                  
+                  if (denominator > 0 && numerator > 0) {
+                    classesToAttend = Math.ceil(numerator / denominator);
+                  } else {
+                    classesToAttend = 0;
+                  }
+                  classesCanSkip = 0;
+                } else {
+                  // Calculate how many classes can be missed while staying above target
+                  // Formula: presentClasses / (totalClasses + x) = targetPercentage / 100
+                  // Solving: x = (100 * presentClasses / targetPercentage) - totalClasses
+                  if (targetPercentage > 0) {
+                    const maxTotalClasses = (100 * presentClasses) / targetPercentage;
+                    classesCanSkip = Math.max(0, Math.floor(maxTotalClasses - totalClasses));
+                  } else {
+                    classesCanSkip = 0;
+                  }
+                  classesToAttend = 0;
+                }
+              }
+
+              subjectMap.set(subjectKey, {
+                name: subject,
+                code: classItem.code || classItem.id || `${subject.substring(0, 3).toUpperCase()}${Math.floor(Math.random() * 900) + 100}`,
+                icon: icons[colorIndex % icons.length],
+                color: colors[colorIndex % colors.length],
+                totalClasses: totalClasses,
+                attendedClasses: presentClasses,
+                attendance: attendancePercentage,
+                classroomId: classroom.id,
+                classroomName: classroom.name || "Unnamed Classroom",
+                classId: classItem.id,
+                targetPercentage: targetPercentage,
+                classesToAttend: classesToAttend,
+                classesCanSkip: classesCanSkip,
+              });
+
+              colorIndex++;
+            }
+          }
+        }
+      }
+
+      return Array.from(subjectMap.values()).sort((a, b) => 
+        a.name.localeCompare(b.name)
+      );
+    } catch (error) {
+      console.error("Error getting subjects data:", error);
+      return [];
+    }
   }
 
   private getDefaultAnalytics(): ClassroomAnalytics {
@@ -307,6 +473,7 @@ export class FirebaseClassroomAnalyticsService {
       subjectDistribution: this.getDefaultSubjectDistribution(),
       weeklyStats: this.getDefaultWeeklyStats(),
       classroomOverview: this.getDefaultClassroomOverview(),
+      subjects: [],
     };
   }
 

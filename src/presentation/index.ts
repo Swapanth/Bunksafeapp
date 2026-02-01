@@ -37,6 +37,10 @@ export { ProfileScreen } from './ui/screens/profile/ProfileScreen';
 export { useNotifications } from './hooks/useNotifications';
 export { useTasks } from './hooks/useTasks';
 
+// Context
+export { ThemeProvider, useTheme } from './context/ThemeContext';
+export type { Theme, ThemeMode } from './context/ThemeContext';
+
 // Notification Components
 export { NotificationSettings } from './ui/components/NotificationSettings';
 export { NotificationStatus } from './ui/components/NotificationStatus';

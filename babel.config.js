@@ -9,7 +9,15 @@ module.exports = function (api) {
       "nativewind/babel",
     ],
     plugins: [
-      // Add any additional plugins if needed
+      [
+        'module-resolver',
+        {
+          root: ['./'],
+          alias: {
+            '@': './',
+          },
+        },
+      ],
     ],
   };
 };

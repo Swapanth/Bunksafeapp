@@ -41,5 +41,7 @@ yarn-error.*
 
 app-example
 
-# Configuration files - should not be tracked
-src/config/
+# Configuration files with sensitive data - DO NOT TRACK
+# Note: firebase.ts uses environment variables, so it's safe to commit
+# src/config/ files are now tracked
+

@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.swapanthvakapalli.bunksafe",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -51,7 +55,13 @@
       "router": {},
       "eas": {
         "projectId": "1a118060-a766-48bf-8dcd-d70b88fbfb32"
-      }
+      },
+      "firebaseApiKey": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+      "firebaseAuthDomain": "bunksafe-app.firebaseapp.com",
+      "firebaseProjectId": "bunksafe-app",
+      "firebaseStorageBucket": "bunksafe-app.firebasestorage.app",
+      "firebaseMessagingSenderId": "146518732652",
+      "firebaseAppId": "1:146518732652:android:3325692838d1a07e748d49"
     }
   }
 }

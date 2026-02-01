@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import { InteractionManager } from 'react-native';
 import {
-  Classmate,
-  CreateFriendRequestData,
-  CreateStudyGroupData,
-  Friend,
-  FriendRequest,
-  StudyGroup,
-  UpdateFriendData
+    Classmate,
+    CreateFriendRequestData,
+    CreateStudyGroupData,
+    Friend,
+    FriendRequest,
+    StudyGroup,
+    UpdateFriendData
 } from '../../domain/model/Friend';
 import { FriendUseCase } from '../../domain/usecase/FriendUseCase';
+import { dataCache } from '../utils/DataCache';
 
 export interface UseFriendsReturn {
   // Friends
@@ -43,11 +45,14 @@ export interface UseFriendsReturn {
 }
 
 export const useFriends = (userId: string | null, userName?: string, userAvatar?: string): UseFriendsReturn => {
+  const cacheKey = `classmates_${userId}`;
+  const cachedClassmates = userId ? dataCache.get<Classmate[]>(cacheKey) : null;
+  
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
-  const [classmates, setClassmates] = useState<Classmate[]>([]);
+  const [classmates, setClassmates] = useState<Classmate[]>(cachedClassmates || []);
   const [studyGroups, setStudyGroups] = useState<StudyGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start false for instant render
   const [classmatesLoading, setClassmatesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -69,8 +74,12 @@ export const useFriends = (userId: string | null, userName?: string, userAvatar?
     }
 
     console.log('🔄 useFriends: Setting up subscriptions for user:', userId);
-    setLoading(true);
     setError(null);
+
+    // Defer loading until after screen renders
+    const task = InteractionManager.runAfterInteractions(() => {
+      setLoading(true);
+    });
 
     try {
       // Subscribe to friends
@@ -204,6 +213,9 @@ export const useFriends = (userId: string | null, userName?: string, userAvatar?
       // Don't clear global error for classmates loading
       const classmatesData = await friendUseCase.getClassmates(userId, classroomId);
       setClassmates(classmatesData);
+      
+      // Cache classmates data for 5 minutes
+      dataCache.set(cacheKey, classmatesData, 5 * 60 * 1000);
     } catch (err: any) {
       console.error('❌ Error loading classmates:', err);
       // For classmates, we'll just set empty array and not show error

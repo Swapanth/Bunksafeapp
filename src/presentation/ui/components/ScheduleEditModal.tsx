@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Modal,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { ClassSchedule, Schedule } from '../../../domain/model/Classroom';
+import { ScheduleSkeleton } from './skeletons/ScheduleSkeleton';
+import { SkeletonLoader } from './skeletons/SkeletonLoader';
 
 interface ScheduleEditModalProps {
   visible: boolean;
@@ -206,6 +208,8 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
         // Add new class
         const newClass: ClassSchedule = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Better ID generation
+          code: '', // Empty code for now
+          subject: formData.name.trim(), // Using name as subject
           name: formData.name.trim(),
           instructor: formData.instructor.trim(),
           day: formData.day,

@@ -94,7 +94,7 @@ export const useTasks = (userId: string | null): UseTasksReturn => {
     try {
       setError(null);
       const task = tasks.find(t => t.id === taskId);
-      if (task) {
+      if (task && userId) {
         await taskUseCase.toggleTaskCompletion(taskId, !task.completed, userId);
         // Real-time listener will update the tasks automatically
       }

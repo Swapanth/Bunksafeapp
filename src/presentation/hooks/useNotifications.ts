@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
-import { FirebaseNotificationService, UserNotificationSettings } from '../../data/services/NotificationBackendService';
-import { NotificationService } from '../../data/services/NotificationClientService';
+import { NotificationBackendService, UserNotificationSettings } from '../../data/services/NotificationBackendService';
+import { NotificationClientService } from '../../data/services/NotificationClientService';
 
 export interface NotificationPermissionStatus {
   granted: boolean;
@@ -19,8 +19,8 @@ export const useNotifications = (userId?: string) => {
   const [isLoading, setIsLoading] = useState(true);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
 
-  const notificationService = NotificationService.getInstance();
-  const firebaseNotificationService = FirebaseNotificationService.getInstance();
+  const notificationService = NotificationClientService.getInstance();
+  const firebaseNotificationService = NotificationBackendService.getInstance();
 
   // Initialize notifications
   const initializeNotifications = useCallback(async () => {

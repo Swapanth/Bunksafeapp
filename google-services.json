@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "146518732652",
+    "project_id": "bunksafe-app",
+    "storage_bucket": "bunksafe-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:146518732652:android:3325692838d1a07e748d49",
+        "android_client_info": {
+          "package_name": "com.swapanthvakapalli.bunksafe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

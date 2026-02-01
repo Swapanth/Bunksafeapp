@@ -1,17 +1,17 @@
 import {
-  createUserWithEmailAndPassword,
-  User as FirebaseUser,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
+    createUserWithEmailAndPassword,
+    User as FirebaseUser,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut,
+    updateProfile,
 } from "firebase/auth";
 import { auth, db } from "../../config/firebase";
 import {
-  AuthResult,
-  LoginCredentials,
-  SignupData,
-  User,
+    AuthResult,
+    LoginCredentials,
+    SignupData,
+    User,
 } from "../../domain/model/User";
 import { AuthRepository } from "../../domain/repository/AuthRepository";
 import { LocalStorage } from "../local/LocalStorage";
@@ -20,6 +20,7 @@ import { FirebaseUserService } from "../services/UserService";
 export class AuthRepositoryImpl implements AuthRepository {
   private currentUser: User | null = null;
   private userService: FirebaseUserService;
+  private authStateListenerInitialized = false;
 
   constructor() {
     this.userService = new FirebaseUserService();
@@ -27,24 +28,43 @@ export class AuthRepositoryImpl implements AuthRepository {
     // Test Firebase connection
     this.testFirebaseConnection();
 
-    // Listen to auth state changes
+    // Listen to auth state changes only once
+    this.initializeAuthStateListener();
+  }
+
+  private initializeAuthStateListener() {
+    if (this.authStateListenerInitialized) {
+      console.log('⚠️ Auth state listener already initialized, skipping');
+      return;
+    }
+
     try {
+      this.authStateListenerInitialized = true;
+      console.log('👂 Setting up Firebase auth state listener...');
+      
       onAuthStateChanged(auth, async (firebaseUser) => {
         console.log('🔥 Firebase auth state changed:', firebaseUser ? firebaseUser.email : 'No user');
         
         if (firebaseUser) {
-          console.log('👤 Mapping Firebase user to app user');
+          console.log('👤 User signed in, mapping Firebase user to app user');
           this.currentUser = await this.mapFirebaseUserToUser(firebaseUser);
           if (this.currentUser) {
-            console.log('✅ User mapped successfully:', this.currentUser.email);
+            console.log('✅ User mapped and stored:', this.currentUser.email);
             await LocalStorage.storeUser(this.currentUser);
           } else {
             console.log('❌ Failed to map Firebase user');
           }
         } else {
-          console.log('🚪 User signed out');
-          this.currentUser = null;
-          await LocalStorage.removeUser();
+          // Only clear local storage if this is an intentional logout
+          // Check if we still have a valid token in storage
+          const storedToken = await LocalStorage.getAuthToken();
+          if (!storedToken) {
+            console.log('🚪 User signed out - clearing local data');
+            this.currentUser = null;
+            await LocalStorage.removeUser();
+          } else {
+            console.log('⚠️ Firebase user null but token exists - possible temporary state, keeping user data');
+          }
         }
       });
     } catch (error) {
@@ -134,11 +154,12 @@ export class AuthRepositoryImpl implements AuthRepository {
       if (user) {
         const token = await userCredential.user.getIdToken();
         await LocalStorage.storeAuthToken(token);
+        await LocalStorage.storeUser(user);
         
         // Update current user immediately
         this.currentUser = user;
         
-        console.log('✅ Login completed successfully');
+        console.log('✅ Login completed successfully with user data persisted');
         return {
           success: true,
           user,
@@ -373,11 +394,21 @@ export class AuthRepositoryImpl implements AuthRepository {
 
   async logout(): Promise<void> {
     try {
-      await signOut(auth);
+      console.log('🚪 Starting logout process...');
+      
+      // Clear local storage first to ensure clean state
       await LocalStorage.removeUser();
+      
+      // Sign out from Firebase - this will trigger auth state listener
+      await signOut(auth);
+      
       this.currentUser = null;
+      console.log('✅ Logout completed successfully');
     } catch (error) {
       console.error("Logout error:", error);
+      // Even if Firebase signOut fails, ensure local data is cleared
+      await LocalStorage.removeUser();
+      this.currentUser = null;
       throw error;
     }
   }

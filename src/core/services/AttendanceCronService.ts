@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { SchedulableTriggerInputTypes } from "expo-notifications";
-import { NotificationService } from "../../data/services/NotificationClientService";
+import { FirebaseClassroomService } from '../../data/services/ClassroomService';
+import { NotificationClientService } from '../../data/services/NotificationClientService';
 import { NotificationTemplate } from "../constants/NotificationTemplates";
 
 export interface AttendanceReminderSettings {
@@ -88,7 +89,7 @@ export class AttendanceCronService {
   ): Promise<AttendanceReminderSettings> {
     try {
       // Note: In a real implementation, you would fetch user settings from Firebase
-      // const firebaseService = FirebaseNotificationService.getInstance();
+      // const firebaseService = FirebaseNotificationClientService.getInstance();
       // const userSettings = await firebaseService.getUserNotificationSettings(userId);
 
       // Default settings if not found
@@ -112,7 +113,7 @@ export class AttendanceCronService {
     userId: string,
     settings: AttendanceReminderSettings
   ): Promise<void> {
-    const notificationService = NotificationService.getInstance();
+    const notificationService = NotificationClientService.getInstance();
 
     try {
       // Cancel any existing attendance notifications first to prevent duplicates
@@ -164,34 +165,197 @@ export class AttendanceCronService {
     userId: string,
     settings: AttendanceReminderSettings
   ): Promise<void> {
-    const notificationService = NotificationService.getInstance();
+    const notificationService = NotificationClientService.getInstance();
 
     try {
-      // Schedule morning message with random time between 7-9 AM
-      const randomHour = Math.floor(Math.random() * 3) + 7; // 7, 8, or 9
-      const randomMinute = Math.floor(Math.random() * 60); // 0-59 minutes
-
-      const morningTemplate = this.getRandomMorningMessageTemplate();
-      const morningTrigger: Notifications.DailyTriggerInput = {
-        hour: randomHour,
-        minute: randomMinute,
+      // Schedule 6:00 AM Good Morning Message
+      const goodMorningTemplate = this.getGoodMorningTemplate();
+      const goodMorningTrigger: Notifications.DailyTriggerInput = {
+        hour: 6,
+        minute: 0,
         type: SchedulableTriggerInputTypes.DAILY
       };
-      const morningId = await notificationService.scheduleLocalNotification(
-        morningTemplate,
-        morningTrigger
+      const goodMorningId = await notificationService.scheduleLocalNotification(
+        goodMorningTemplate,
+        goodMorningTrigger
       );
+      this.scheduledNotifications.set("good_morning_message", goodMorningId);
+      console.log("Good morning message scheduled at 6:00 AM");
 
-      this.scheduledNotifications.set("morning_message", morningId);
+      // Schedule 8:00 AM Today's Classes Message
+      // Fetch classes for the ACTUAL day when this runs
+      await this.scheduleClassesNotificationForToday(userId, notificationService);
 
-      console.log(
-        `Morning message scheduled at ${randomHour}:${randomMinute
-          .toString()
-          .padStart(2, "0")}`
-      );
     } catch (error) {
       console.error("Failed to schedule morning messages:", error);
     }
+  }
+
+  private async scheduleClassesNotificationForToday(
+    userId: string,
+    notificationService: NotificationClientService
+  ): Promise<void> {
+    try {
+      // Get TODAY's actual classes (not when scheduled, but when the method runs)
+      const classesTemplate = await this.getTodaysClassesTemplateRealtime(userId);
+      const classesTrigger: Notifications.DailyTriggerInput = {
+        hour: 8,
+        minute: 0,
+        type: SchedulableTriggerInputTypes.DAILY
+      };
+      const classesId = await notificationService.scheduleLocalNotification(
+        classesTemplate,
+        classesTrigger
+      );
+      this.scheduledNotifications.set("todays_classes_message", classesId);
+      console.log("Today's classes message scheduled at 8:00 AM for", new Date().toLocaleDateString('en-US', { weekday: 'long' }));
+    } catch (error) {
+      console.error("Failed to schedule classes notification:", error);
+    }
+  }
+
+  private getGoodMorningTemplate(): NotificationTemplate {
+    const messages = [
+      {
+        title: "🌅 Good Morning!",
+        body: "Rise and shine! Time to make today awesome! ☀️",
+      },
+      {
+        title: "☀️ Good Morning Superstar!",
+        body: "Early bird gets the worm! Let's start this day right! 🐦",
+      },
+      {
+        title: "🌞 Morning Sunshine!",
+        body: "Today is your day! Let's make it count! ✨",
+      },
+      {
+        title: "🌄 Good Morning Champion!",
+        body: "Another day, another opportunity to shine! 🏆",
+      },
+      {
+        title: "☕ Good Morning!",
+        body: "Coffee's ready, motivation's high! Let's do this! 💪",
+      },
+    ];
+
+    const randomIndex = Math.floor(Math.random() * messages.length);
+    const message = messages[randomIndex];
+
+    return {
+      id: "good_morning",
+      title: message.title,
+      body: message.body,
+      data: {
+        type: "morning_greeting",
+        timestamp: new Date().toISOString(),
+      },
+      priority: "default",
+      sound: "default",
+      badge: 0,
+    };
+  }
+
+  private async getTodaysClassesTemplateRealtime(userId: string): Promise<NotificationTemplate> {
+    const classroomService = new FirebaseClassroomService();
+    
+    try {
+      // IMPORTANT: Get the ACTUAL current day, not when this was first scheduled
+      const now = new Date();
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const todayName = dayNames[now.getDay()];
+      
+      console.log(`📅 Fetching classes for: ${todayName} (${now.toLocaleDateString()})`);
+      
+      const classrooms = await classroomService.getUserClassrooms(userId);
+      const todaysClasses: Array<{name: string, time: string, location: string}> = [];
+      
+      for (const classroom of classrooms) {
+        const schedule = await classroomService.getClassroomSchedule(classroom.id);
+        if (schedule) {
+          const dayClasses = schedule.classes.filter(cls => {
+            // Match the exact day name
+            const matches = cls.day === todayName;
+            if (matches) {
+              console.log(`✓ Found class: ${cls.name} on ${cls.day}`);
+            }
+            return matches;
+          });
+          
+          dayClasses.forEach(cls => {
+            let timeStr = cls.startTime;
+            if (cls.endTime) {
+              timeStr = `${cls.startTime} - ${cls.endTime}`;
+            }
+            todaysClasses.push({
+              name: cls.name,
+              time: timeStr,
+              location: cls.location || 'Not specified'
+            });
+          });
+        }
+      }
+      
+      // Sort by start time
+      todaysClasses.sort((a, b) => a.time.localeCompare(b.time));
+      
+      console.log(`📚 Total classes found for ${todayName}: ${todaysClasses.length}`);
+      
+      let title = "📚 Today's Class Schedule";
+      let body = "";
+      
+      if (todaysClasses.length === 0) {
+        title = "🎉 No Classes Today!";
+        body = "Enjoy your day off! Rest well and recharge! 😊";
+      } else {
+        // Create clean formatted message
+        const classLines = todaysClasses.slice(0, 6).map((cls, index) => 
+          `${index + 1}. ${cls.name}\n   ⏰ ${cls.time}\n   📍 ${cls.location}`
+        ).join('\n\n');
+        
+        body = classLines;
+        
+        if (todaysClasses.length > 6) {
+          body += `\n\n📋 +${todaysClasses.length - 6} more classes`;
+        }
+        
+        body += "\n\n✨ Have a great day!";
+      }
+      
+      return {
+        id: "todays_classes",
+        title: title,
+        body: body,
+        data: {
+          type: "class_schedule",
+          day: todayName,
+          classCount: todaysClasses.length,
+          timestamp: new Date().toISOString(),
+        },
+        priority: "default",
+        sound: "default",
+        badge: 0,
+      };
+    } catch (error) {
+      console.error("Error creating today's classes template:", error);
+      
+      return {
+        id: "todays_classes",
+        title: "📚 Class Schedule",
+        body: "Check your app for today's class schedule",
+        data: {
+          type: "class_schedule",
+          timestamp: new Date().toISOString(),
+        },
+        priority: "default",
+        sound: "default",
+        badge: 0,
+      };
+    }
+  }
+
+  private async getTodaysClassesTemplate(userId: string): Promise<NotificationTemplate> {
+    // This method is deprecated - use getTodaysClassesTemplateRealtime instead
+    return this.getTodaysClassesTemplateRealtime(userId);
   }
 
   private getRandomAttendanceReminderTemplate(): NotificationTemplate {
@@ -338,7 +502,7 @@ export class AttendanceCronService {
     };
   }
 
-  private getRandomMorningMessageTemplate(): NotificationTemplate {
+  private getRandomMorningMessageTemplate(classSchedule: string = ""): NotificationTemplate {
     const morningMessages = [
       {
         title: "🌅 Good Morning Superstar!",
@@ -428,7 +592,7 @@ export class AttendanceCronService {
     return {
       id: "morning_motivation",
       title: message.title,
-      body: message.body,
+      body: message.body + classSchedule,
       data: {
         type: "morning_message",
         timestamp: new Date().toISOString(),
@@ -470,7 +634,7 @@ export class AttendanceCronService {
   // Cancel all attendance-related notifications
   async cancelAllAttendanceNotifications(): Promise<void> {
     try {
-      const notificationService = NotificationService.getInstance();
+      const notificationService = NotificationClientService.getInstance();
 
       // Cancel all scheduled notifications (system-wide cleanup)
       await notificationService.cancelAllNotifications();
@@ -486,7 +650,7 @@ export class AttendanceCronService {
   // Method to manually trigger a test notification
   async sendTestAttendanceReminder(userId: string): Promise<void> {
     try {
-      const notificationService = NotificationService.getInstance();
+      const notificationService = NotificationClientService.getInstance();
       const testTemplate = this.getRandomAttendanceReminderTemplate();
 
       await notificationService.scheduleLocalNotification(testTemplate);
@@ -499,7 +663,7 @@ export class AttendanceCronService {
   // Method to manually trigger a test morning message
   async sendTestMorningMessage(userId: string): Promise<void> {
     try {
-      const notificationService = NotificationService.getInstance();
+      const notificationService = NotificationClientService.getInstance();
       const testTemplate = this.getRandomMorningMessageTemplate();
 
       await notificationService.scheduleLocalNotification(testTemplate);

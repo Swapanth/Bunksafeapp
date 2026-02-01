@@ -1,12 +1,12 @@
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  setDoc,
-  updateDoc,
-  where,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    query,
+    setDoc,
+    updateDoc,
+    where,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 
@@ -202,15 +202,16 @@ export class FirebaseUserService {
     try {
       console.log("🔍 Checking user existence for email:", email);
 
-      const usersRef = collection(db, "users");
+      // Use userRegistry collection which allows public reads
+      const userRegistryRef = collection(db, "userRegistry");
       const q = query(
-        usersRef,
+        userRegistryRef,
         where("email", "==", email.toLowerCase().trim())
       );
       const querySnapshot = await getDocs(q);
 
       const exists = !querySnapshot.empty;
-      console.log("👤 User exists:", exists);
+      console.log("👤 User exists in Firestore:", exists);
       return exists;
     } catch (error) {
       console.error("❌ Error checking user existence:", error);

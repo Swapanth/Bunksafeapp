@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FirebaseNotificationService } from '../../data/services/NotificationBackendService';
-import { NotificationService } from '../../data/services/NotificationClientService';
+import { NotificationBackendService } from '../../data/services/NotificationBackendService';
+import { NotificationClientService } from '../../data/services/NotificationClientService';
 import { AttendanceCronService } from './AttendanceCronService';
 
 export class AppNotificationInitializer {
@@ -25,8 +25,14 @@ export class AppNotificationInitializer {
     try {
       console.log('Initializing notification system...');
       
-      const notificationService = NotificationService.getInstance();
-      const firebaseNotificationService = FirebaseNotificationService.getInstance();
+      // Check if NotificationService is available (not available in Expo Go)
+      if (!NotificationClientService || typeof NotificationClientService.getInstance !== 'function') {
+        console.warn('NotificationService not available - skipping notification initialization');
+        return;
+      }
+      
+      const notificationService = NotificationClientService.getInstance();
+      const firebaseNotificationService = NotificationBackendService.getInstance();
 
       // Initialize notification service
       await notificationService.initialize();
@@ -64,8 +70,8 @@ export class AppNotificationInitializer {
 
   private async setupUserNotifications(
     userId: string,
-    notificationService: NotificationService,
-    firebaseNotificationService: FirebaseNotificationService
+    notificationService: NotificationClientService,
+    firebaseNotificationService: NotificationBackendService
   ): Promise<void> {
     try {
       // Get or create user notification settings
@@ -83,6 +89,7 @@ export class AppNotificationInitializer {
           deadlineReminders: true,
           dailyReminders: true,
           weeklyReports: true,
+          messageNotifications: true,
           reminderHour: 9,
           reminderMinute: 0,
           // Only include expoPushToken if it's available (not null/undefined)
@@ -125,7 +132,7 @@ export class AppNotificationInitializer {
 
   private scheduleDailyCleanup(
     userId: string | undefined,
-    firebaseNotificationService: FirebaseNotificationService
+    firebaseNotificationService: NotificationBackendService
   ): void {
     // Schedule cleanup of old notifications (runs once per day)
     const now = new Date();
@@ -152,8 +159,8 @@ export class AppNotificationInitializer {
 
   // Method to reinitialize when user logs in
   async reinitializeForUser(userId: string): Promise<void> {
-    const notificationService = NotificationService.getInstance();
-    const firebaseNotificationService = FirebaseNotificationService.getInstance();
+    const notificationService = NotificationClientService.getInstance();
+    const firebaseNotificationService = NotificationBackendService.getInstance();
 
     await this.setupUserNotifications(userId, notificationService, firebaseNotificationService);
     
@@ -165,7 +172,7 @@ export class AppNotificationInitializer {
   // Method to cleanup when user logs out
   async cleanup(): Promise<void> {
     try {
-      const notificationService = NotificationService.getInstance();
+      const notificationService = NotificationClientService.getInstance();
       
       // Cancel all scheduled notifications
       await notificationService.cancelAllNotifications();
@@ -190,8 +197,8 @@ export class AppNotificationInitializer {
   // Method to update push token when it becomes available
   async updatePushTokenForUser(userId: string): Promise<void> {
     try {
-      const notificationService = NotificationService.getInstance();
-      const firebaseNotificationService = FirebaseNotificationService.getInstance();
+      const notificationService = NotificationClientService.getInstance();
+      const firebaseNotificationService = NotificationBackendService.getInstance();
       
       const pushToken = notificationService.getExpoPushToken();
       if (pushToken) {
@@ -209,7 +216,7 @@ export class AppNotificationInitializer {
   // Utility method to test notifications
   async testNotification(): Promise<void> {
     try {
-      const notificationService = NotificationService.getInstance();
+      const notificationService = NotificationClientService.getInstance();
       
       const testTemplate = {
         id: 'test',

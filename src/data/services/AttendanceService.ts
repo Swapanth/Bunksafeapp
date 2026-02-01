@@ -1,22 +1,22 @@
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  setDoc,
-  updateDoc,
-  where,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    query,
+    setDoc,
+    updateDoc,
+    where,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { calculateAttendanceWithPreRegistration, testSemesterCalculation } from "../../core/utils/SemesterUtils";
 import {
-  AttendanceRecord,
-  AttendanceStreak,
-  AttendanceSummary,
-  DashboardData,
-  SemesterInfo,
-  TodaysClass,
+    AttendanceRecord,
+    AttendanceStreak,
+    AttendanceSummary,
+    DashboardData,
+    SemesterInfo,
+    TodaysClass,
 } from "../../domain/model/Attendance";
 import { FirebaseClassroomService } from "./ClassroomService";
 import { FirebaseTaskService } from "./TaskService";
@@ -33,18 +33,28 @@ export class FirebaseAttendanceService {
     classroomId: string,
     classId: string,
     status: "present" | "absent",
-    reason?: string
+    reason?: string,
+    subject?: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const today = new Date().toISOString().split("T")[0];
       const attendanceId = `${userId}_${classId}_${today}`;
       const now = new Date().toISOString();
 
+      // Fetch subject name if not provided
+      let subjectName = subject;
+      if (!subjectName) {
+        const schedule = await this.classroomService.getClassroomSchedule(classroomId);
+        const classInfo = schedule?.classes.find(c => c.id === classId);
+        subjectName = classInfo?.name || "Unknown Subject";
+      }
+
       const attendanceRecord: AttendanceRecord = {
         id: attendanceId,
         userId,
         classroomId,
         classId,
+        subject: subjectName,
         date: today,
         status,
         markedAt: now,
@@ -57,15 +67,26 @@ export class FirebaseAttendanceService {
       }
 
       await setDoc(doc(db, "attendance", attendanceId), attendanceRecord);
+      console.log("✅ Attendance record saved:", attendanceId);
 
       // Update attendance streak if present
       if (status === "present") {
-        await this.updateAttendanceStreak(userId);
+        console.log("📊 Status is present, updating streak...");
+        try {
+          await this.updateAttendanceStreak(userId);
+          console.log("✅ Streak update completed");
+        } catch (streakError) {
+          console.error("❌ Streak update failed:", streakError);
+          // Don't fail the entire operation if streak update fails
+        }
       }
+
+      // Update cached attendance stats
+      await this.updateAttendanceStats(userId, classroomId, classId, status);
 
       return { success: true };
     } catch (error) {
-      console.error("Error marking attendance:", error);
+      console.error("❌ Error marking attendance:", error);
       return { success: false, error: "Failed to mark attendance" };
     }
   }
@@ -93,10 +114,31 @@ export class FirebaseAttendanceService {
       }
 
       await updateDoc(doc(db, "attendance", attendanceId), updateData);
+      console.log("✅ Attendance record updated:", attendanceId, "status:", status);
+
+      // Update attendance streak if present
+      if (status === "present") {
+        console.log("📊 Status changed to present, updating streak...");
+        try {
+          await this.updateAttendanceStreak(userId);
+          console.log("✅ Streak update completed after status change");
+        } catch (streakError) {
+          console.error("❌ Streak update failed:", streakError);
+          // Don't fail the entire operation if streak update fails
+        }
+      }
+
+      // Update cached attendance stats for the updated record
+      const attendanceRef = doc(db, "attendance", attendanceId);
+      const attendanceSnap = await getDoc(attendanceRef);
+      if (attendanceSnap.exists()) {
+        const record = attendanceSnap.data() as AttendanceRecord;
+        await this.updateAttendanceStats(userId, record.classroomId, classId, status);
+      }
 
       return { success: true };
     } catch (error) {
-      console.error("Error updating attendance:", error);
+      console.error("❌ Error updating attendance:", error);
       return { success: false, error: "Failed to update attendance" };
     }
   }
@@ -122,6 +164,69 @@ export class FirebaseAttendanceService {
     }
   }
 
+  // Auto-mark unmarked attendance as absent for past dates
+  async autoMarkUnmarkedAsAbsent(userId: string, targetDate?: string): Promise<void> {
+    try {
+      const dateToCheck = targetDate || new Date(Date.now() - 86400000).toISOString().split("T")[0]; // Yesterday
+      console.log(`🤖 Auto-marking unmarked attendance as absent for: ${dateToCheck}`);
+
+      // Get day of week for the target date
+      const targetDateObj = new Date(dateToCheck + 'T00:00:00');
+      const dayIndex = targetDateObj.getDay();
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const dayName = dayNames[dayIndex];
+
+      // Get user's classrooms
+      const classrooms = await this.classroomService.getUserClassrooms(userId);
+      let unmarkedCount = 0;
+
+      for (const classroom of classrooms) {
+        // Get schedule for this classroom
+        const schedule = await this.classroomService.getClassroomSchedule(classroom.id);
+
+        if (schedule) {
+          // Filter classes for that day
+          const dayClasses = schedule.classes.filter(cls => cls.day === dayName);
+
+          for (const cls of dayClasses) {
+            // Check if attendance is already marked
+            const attendanceId = `${userId}_${cls.id}_${dateToCheck}`;
+            const existingRecord = await this.getAttendanceRecord(userId, cls.id, dateToCheck);
+
+            if (!existingRecord) {
+              // Mark as absent with auto-generated reason
+              const now = new Date().toISOString();
+              const attendanceRecord: AttendanceRecord = {
+                id: attendanceId,
+                userId,
+                classroomId: classroom.id,
+                classId: cls.id,
+                subject: cls.name,
+                date: dateToCheck,
+                status: 'absent',
+                reason: 'Auto-marked as absent (not manually marked)',
+                markedAt: now,
+                updatedAt: now,
+              };
+
+              await setDoc(doc(db, "attendance", attendanceId), attendanceRecord);
+              
+              // Update cached stats
+              await this.updateAttendanceStats(userId, classroom.id, cls.id, 'absent');
+              
+              unmarkedCount++;
+              console.log(`  ✅ Auto-marked ${cls.name} as absent for ${dateToCheck}`);
+            }
+          }
+        }
+      }
+
+      console.log(`🎯 Auto-marked ${unmarkedCount} classes as absent for ${dateToCheck}`);
+    } catch (error) {
+      console.error("❌ Error auto-marking attendance:", error);
+    }
+  }
+
   // Update attendance streak
   private async updateAttendanceStreak(userId: string): Promise<void> {
     try {
@@ -130,6 +235,8 @@ export class FirebaseAttendanceService {
         .toISOString()
         .split("T")[0];
 
+      console.log("🔥 Updating streak for user:", userId, "today:", today, "yesterday:", yesterday);
+
       const streakRef = doc(db, "attendanceStreaks", userId);
       const streakSnap = await getDoc(streakRef);
 
@@ -137,9 +244,15 @@ export class FirebaseAttendanceService {
 
       if (streakSnap.exists()) {
         const existingStreak = streakSnap.data() as AttendanceStreak;
+        console.log("📈 Existing streak found:", {
+          currentStreak: existingStreak.currentStreak,
+          lastCheckedDate: existingStreak.lastCheckedDate,
+          totalDaysMarked: existingStreak.totalDaysMarked
+        });
 
         if (existingStreak.lastCheckedDate === yesterday) {
           // Continue streak
+          console.log("✅ Continuing streak from yesterday");
           streak = {
             ...existingStreak,
             currentStreak: existingStreak.currentStreak + 1,
@@ -151,8 +264,29 @@ export class FirebaseAttendanceService {
             ),
             updatedAt: new Date().toISOString(),
           };
-        } else if (existingStreak.lastCheckedDate !== today) {
-          // Reset streak
+        } else if (existingStreak.lastCheckedDate === today) {
+          // Check if this is the first attendance today (streak is 0)
+          if (existingStreak.currentStreak === 0 && existingStreak.totalDaysMarked === 0) {
+            console.log("🎯 First attendance today, starting streak at 1");
+            streak = {
+              ...existingStreak,
+              currentStreak: 1,
+              lastCheckedDate: today,
+              totalDaysMarked: 1,
+              longestStreak: 1,
+              updatedAt: new Date().toISOString(),
+            };
+          } else {
+            // Already counted today, just update timestamp
+            console.log("ℹ️ Already counted today, just updating timestamp");
+            streak = {
+              ...existingStreak,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+        } else {
+          // Reset streak (gap detected)
+          console.log("🔄 Resetting streak - gap detected between", existingStreak.lastCheckedDate, "and", today);
           streak = {
             ...existingStreak,
             currentStreak: 1,
@@ -160,12 +294,10 @@ export class FirebaseAttendanceService {
             totalDaysMarked: existingStreak.totalDaysMarked + 1,
             updatedAt: new Date().toISOString(),
           };
-        } else {
-          // Already marked today
-          return;
         }
       } else {
         // Create new streak
+        console.log("🆕 Creating new streak");
         streak = {
           userId,
           currentStreak: 1,
@@ -176,9 +308,102 @@ export class FirebaseAttendanceService {
         };
       }
 
+      console.log("💾 Saving streak:", {
+        currentStreak: streak.currentStreak,
+        lastCheckedDate: streak.lastCheckedDate,
+        totalDaysMarked: streak.totalDaysMarked,
+        longestStreak: streak.longestStreak
+      });
+
       await setDoc(streakRef, streak);
+      console.log("✅ Streak setDoc completed");
+      
+      // Verify the save
+      const verifySnap = await getDoc(streakRef);
+      if (verifySnap.exists()) {
+        const savedData = verifySnap.data();
+        console.log("✅ Verified streak in DB:", {
+          currentStreak: savedData.currentStreak,
+          lastCheckedDate: savedData.lastCheckedDate,
+          totalDaysMarked: savedData.totalDaysMarked
+        });
+      } else {
+        console.error("❌ Streak document not found after save!");
+      }
     } catch (error) {
-      console.error("Error updating attendance streak:", error);
+      console.error("❌ Error updating attendance streak:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
+    }
+  }
+
+  // Update cached attendance statistics
+  private async updateAttendanceStats(
+    userId: string,
+    classroomId: string,
+    classId: string,
+    newStatus: 'present' | 'absent'
+  ): Promise<void> {
+    try {
+      const statsId = `${userId}_${classroomId}_${classId}`;
+      const statsRef = doc(db, "attendanceStats", statsId);
+      const statsSnap = await getDoc(statsRef);
+
+      // Get all attendance records for this class to calculate totals
+      const attendanceQuery = query(
+        collection(db, "attendance"),
+        where("userId", "==", userId),
+        where("classId", "==", classId)
+      );
+      const attendanceSnapshot = await getDocs(attendanceQuery);
+      
+      const totalClasses = attendanceSnapshot.size;
+      const attendedClasses = attendanceSnapshot.docs.filter(
+        doc => doc.data().status === 'present'
+      ).length;
+      
+      const absentClasses = totalClasses - attendedClasses;
+      const attendancePercentage = totalClasses > 0 
+        ? Math.round((attendedClasses / totalClasses) * 10000) / 100 
+        : 0;
+
+      const now = new Date().toISOString();
+      const today = now.split('T')[0];
+
+      if (statsSnap.exists()) {
+        // Update existing stats
+        await updateDoc(statsRef, {
+          totalClasses,
+          attendedClasses,
+          absentClasses,
+          attendancePercentage,
+          lastMarkedDate: today,
+          lastMarkedStatus: newStatus,
+          updatedAt: now
+        });
+      } else {
+        // Create new stats entry (get subject info from classroom schedule)
+        const schedule = await this.classroomService.getClassroomSchedule(classroomId);
+        const classSchedule = schedule?.classes.find((c) => c.id === classId);
+        
+        await setDoc(statsRef, {
+          id: statsId,
+          userId,
+          classroomId,
+          classId,
+          subject: classSchedule?.name || 'Unknown',
+          instructor: classSchedule?.instructor || 'Unknown',
+          totalClasses,
+          attendedClasses,
+          absentClasses,
+          attendancePercentage,
+          lastMarkedDate: today,
+          lastMarkedStatus: newStatus,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+    } catch (error) {
+      console.error("Error updating attendance stats:", error);
     }
   }
 
@@ -194,6 +419,39 @@ export class FirebaseAttendanceService {
       return null;
     } catch (error) {
       console.error("Error getting attendance streak:", error);
+      return null;
+    }
+  }
+
+  // Get cached attendance stats (fast lookup)
+  async getAttendanceStatsFromCache(
+    userId: string,
+    classId: string
+  ): Promise<{
+    totalClasses: number;
+    attendedClasses: number;
+    attendancePercentage: number;
+  } | null> {
+    try {
+      const statsQuery = query(
+        collection(db, "attendanceStats"),
+        where("userId", "==", userId),
+        where("classId", "==", classId)
+      );
+      const statsSnapshot = await getDocs(statsQuery);
+      
+      if (statsSnapshot.empty) {
+        return null;
+      }
+
+      const stats = statsSnapshot.docs[0].data();
+      return {
+        totalClasses: stats.totalClasses || 0,
+        attendedClasses: stats.attendedClasses || 0,
+        attendancePercentage: stats.attendancePercentage || 0
+      };
+    } catch (error) {
+      console.error("Error getting cached attendance stats:", error);
       return null;
     }
   }
@@ -244,16 +502,19 @@ export class FirebaseAttendanceService {
 
       return {
         classId,
-        className: "", // Will be filled by caller
+        classroomId: "", // Will be filled by caller
+        subject: "", // Will be filled by caller
         instructor: "", // Will be filled by caller
-        totalClasses,
-        attendedClasses,
-        absentClasses,
-        attendancePercentage: Math.round(attendancePercentage * 100) / 100,
+        totalClassesSoFar: totalClasses,
+        totalAttendedSoFar: attendedClasses,
+        totalAbsences: absentClasses,
+        currentAttendancePercentage: Math.round(attendancePercentage * 100) / 100,
         requiredAttendancePercentage: requiredPercentage,
-        isAttendanceCritical: attendancePercentage < requiredPercentage,
+        expectedTotalForSemester: 0, // Will be calculated by caller
+        remainingClasses: 0, // Will be calculated by caller
         classesToAttend,
         classesCanSkip,
+        isAttendanceCritical: attendancePercentage < requiredPercentage,
       };
     } catch (error) {
       console.error("Error getting attendance summary:", error);
@@ -319,8 +580,8 @@ export class FirebaseAttendanceService {
               isCheckedIn: !!attendanceRecord,
               attendanceStatus: attendanceRecord?.status,
               reason: attendanceRecord?.reason,
-              totalClasses: summary?.totalClasses || 0,
-              attendedClasses: summary?.attendedClasses || 0,
+              totalClasses: summary?.totalClassesSoFar || 0,
+              attendedClasses: summary?.totalAttendedSoFar || 0,
               requiredAttendancePercentage: classroom.attendanceTarget,
             };
 
@@ -339,12 +600,46 @@ export class FirebaseAttendanceService {
   // Get dashboard data for user
   async getDashboardData(userId: string): Promise<DashboardData | null> {
     try {
+      console.log('🔍 getDashboardData called for userId:', userId);
+      
       // Get user info
-      const user = await this.userService.getUserById(userId);
+      let user = await this.userService.getUserById(userId);
       if (!user) {
-        return null;
+        console.error('❌ User document not found for userId:', userId);
+        console.warn('💡 Attempting to create basic user document...');
+        
+        // Try to get user from Firebase Auth and create document
+        try {
+          const { auth } = await import('../../config/firebase');
+          const currentUser = auth.currentUser;
+          
+          if (currentUser && currentUser.uid === userId) {
+            // Create a basic user document
+            await this.userService.createUserProfile(userId, {
+              email: currentUser.email || '',
+              name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
+              nickname: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
+              mobileNumber: currentUser.phoneNumber || '',
+              collegeName: '',
+              createdAt: new Date().toISOString(),
+              onboardingCompleted: false,
+              attendanceTarget: 75,
+            });
+            
+            console.log('✅ Basic user document created, retrying...');
+            user = await this.userService.getUserById(userId);
+          }
+        } catch (createError) {
+          console.error('Failed to auto-create user document:', createError);
+        }
+        
+        if (!user) {
+          console.error('💡 User needs to complete onboarding');
+          return null;
+        }
       }
 
+      console.log('✅ User found:', user.nickname || user.name);
       console.log('User data for semester info:', {
         semesterStartDate: user.semesterStartDate,
         semesterEndDate: user.semesterEndDate,
@@ -463,7 +758,13 @@ export class FirebaseAttendanceService {
       };
     } catch (error) {
       console.error("Error getting dashboard data:", error);
+      console.error("Full error details:", JSON.stringify(error, null, 2));
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      }
       return null;
     }
   }
+
 }

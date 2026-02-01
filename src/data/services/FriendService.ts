@@ -346,13 +346,44 @@ export class FirebaseFriendService {
     try {
       console.log("🔥 Fetching classmates for user:", userId);
 
-      // First, try to get classmates from classroom members if classroomId is provided
+      // If specific classroomId is provided, get classmates from that classroom
       if (classroomId) {
         return await this.getClassmatesFromClassroom(userId, classroomId);
       }
 
-      // Fallback: Get classmates from public user profiles
-      return await this.getClassmatesFromProfiles(userId);
+      // Otherwise, get classmates from all classrooms the user is a member of
+      const classroomsQuery = query(
+        collection(db, "classrooms"),
+        where("members", "array-contains", userId)
+      );
+      const classroomsSnapshot = await getDocs(classroomsQuery);
+      
+      console.log("📚 User is member of", classroomsSnapshot.size, "classrooms");
+
+      if (classroomsSnapshot.empty) {
+        console.log("⚠️ User is not a member of any classroom");
+        return [];
+      }
+
+      // Get classmates from all classrooms and deduplicate
+      const classmatesMap = new Map<string, Classmate>();
+
+      for (const classroomDoc of classroomsSnapshot.docs) {
+        const classroomId = classroomDoc.id;
+        const classmates = await this.getClassmatesFromClassroom(userId, classroomId);
+        
+        // Add to map (deduplicates by userId)
+        classmates.forEach(classmate => {
+          if (!classmatesMap.has(classmate.userId)) {
+            classmatesMap.set(classmate.userId, classmate);
+          }
+        });
+      }
+
+      const allClassmates = Array.from(classmatesMap.values());
+      console.log("✅ Found", allClassmates.length, "unique classmates across all classrooms");
+      
+      return allClassmates;
     } catch (error) {
       console.error("❌ Error fetching classmates:", error);
       throw error;
@@ -378,6 +409,8 @@ export class FirebaseFriendService {
       const classroomData = classroomSnap.data();
       const members = classroomData.members || [];
 
+      console.log("📋 Classroom members:", members.length, "members -", members);
+
       if (!members.includes(userId)) {
         console.log("⚠️ User is not a member of this classroom");
         return [];
@@ -401,15 +434,26 @@ export class FirebaseFriendService {
         if (memberId !== userId) {
           // Exclude current user
           try {
-            const profileRef = doc(db, "userProfiles", memberId);
-            const profileSnap = await getDoc(profileRef);
+            console.log("👤 Fetching profile for member:", memberId);
+            
+            // Try userProfiles collection first
+            let profileRef = doc(db, "userProfiles", memberId);
+            let profileSnap = await getDoc(profileRef);
+
+            // If not found, try users collection as fallback
+            if (!profileSnap.exists()) {
+              console.log("🔄 Trying users collection for:", memberId);
+              profileRef = doc(db, "users", memberId);
+              profileSnap = await getDoc(profileRef);
+            }
 
             if (profileSnap.exists()) {
               const data = profileSnap.data();
+              console.log("✅ Profile found for:", memberId, "- Name:", data.displayName || data.name || data.nickname);
               classmates.push({
                 id: memberId,
                 userId: memberId,
-                name: data.displayName || data.name || "Unknown",
+                name: data.displayName || data.name || data.nickname || "Unknown",
                 avatar: data.avatar || "👤",
                 email: data.email || "",
                 status: data.status || "offline",
@@ -421,6 +465,8 @@ export class FirebaseFriendService {
                 friendRequestSent: false, // This would need additional logic
                 commonSubjects: data.subjects || [],
               });
+            } else {
+              console.warn("⚠️ No profile found in userProfiles or users collection for member:", memberId);
             }
           } catch (error) {
             console.warn(

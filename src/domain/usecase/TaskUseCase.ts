@@ -1,13 +1,14 @@
-import { FirebaseNotificationService } from "../../data/services/NotificationBackendService";
-import { NotificationService } from "../../data/services/NotificationClientService";
+import { TaskNotificationData } from '../../core/constants/NotificationTemplates';
+import { NotificationBackendService } from '../../data/services/NotificationBackendService';
+import { NotificationClientService } from '../../data/services/NotificationClientService';
 import { FirebaseTaskService } from "../../data/services/TaskService";
 import { CreateTaskData, Task, UpdateTaskData } from "../model/Task";
 
 export class TaskUseCase {
   constructor(
     private taskService: FirebaseTaskService = new FirebaseTaskService(),
-    private notificationService: NotificationService = NotificationService.getInstance(),
-    private firebaseNotificationService: FirebaseNotificationService = FirebaseNotificationService.getInstance()
+    private notificationService: NotificationClientService | null = NotificationClientService?.getInstance ? NotificationClientService.getInstance() : null,
+    private firebaseNotificationService: NotificationBackendService | null = NotificationBackendService?.getInstance ? NotificationBackendService.getInstance() : null
   ) {}
 
   async createTask(userId: string, taskData: CreateTaskData): Promise<string> {
@@ -38,18 +39,26 @@ export class TaskUseCase {
       };
 
       // Send local notification
-      await this.notificationService.notifyTaskCreated(notificationData);
+      if (this.notificationService) {
+        await this.notificationService.notifyTaskCreated(notificationData);
+      }
       
       // Save to Firebase and send push notification if enabled
-      await this.firebaseNotificationService.triggerTaskCreatedNotification(userId, notificationData);
+      if (this.firebaseNotificationService) {
+        await this.firebaseNotificationService.triggerTaskCreatedNotification(userId, notificationData);
+      }
 
       // Schedule deadline reminder (24 hours before due date)
       const dueDate = new Date(taskData.dueDate);
       const reminderDate = new Date(dueDate.getTime() - 24 * 60 * 60 * 1000); // 24 hours before
       
       if (reminderDate > new Date()) {
-        await this.notificationService.scheduleDeadlineReminder(notificationData, reminderDate);
-        await this.firebaseNotificationService.scheduleDeadlineReminder(userId, notificationData, reminderDate);
+        if (this.notificationService) {
+          await this.notificationService.scheduleDeadlineReminder(notificationData, reminderDate);
+        }
+        if (this.firebaseNotificationService) {
+          await this.firebaseNotificationService.scheduleDeadlineReminder(userId, notificationData, reminderDate);
+        }
       }
     } catch (error) {
       console.error('Failed to send task created notification:', error);
@@ -112,10 +121,14 @@ export class TaskUseCase {
             };
 
             // Send local notification
-            await this.notificationService.notifyTaskCompleted(notificationData);
+            if (this.notificationService) {
+              await this.notificationService.notifyTaskCompleted(notificationData);
+            }
             
             // Save to Firebase and send push notification if enabled
-            await this.firebaseNotificationService.triggerTaskCompletedNotification(task.userId, notificationData);
+            if (this.firebaseNotificationService) {
+              await this.firebaseNotificationService.triggerTaskCompletedNotification(task.userId, notificationData);
+            }
           }
         } else {
           console.warn('Cannot send task completion notification: userId is empty');

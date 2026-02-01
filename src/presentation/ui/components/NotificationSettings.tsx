@@ -158,6 +158,21 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({
 
               <View className="flex-row justify-between items-center py-3 border-b border-gray-200">
                 <View>
+                  <Text className="font-medium text-gray-900">Message Notifications</Text>
+                  <Text className="text-sm text-gray-600">
+                    Get notified when you receive new messages
+                  </Text>
+                </View>
+                <Switch
+                  value={settings.messageNotifications ?? true}
+                  onValueChange={(value) => handleSettingChange('messageNotifications', value)}
+                  trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
+                  thumbColor={(settings.messageNotifications ?? true) ? '#ffffff' : '#f3f4f6'}
+                />
+              </View>
+
+              <View className="flex-row justify-between items-center py-3 border-b border-gray-200">
+                <View>
                   <Text className="font-medium text-gray-900">Deadline Reminders</Text>
                   <Text className="text-sm text-gray-600">
                     Get reminded before task deadlines
@@ -241,6 +256,7 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({
           <Text className="text-blue-800 font-semibold mb-2">ℹ️ About Notifications</Text>
           <Text className="text-blue-700 text-sm leading-5">
             • Task creation notifications are sent immediately when you create a task{'\n'}
+            • Message notifications are sent when you receive new messages (only when you're not viewing the chat){'\n'}
             • Deadline reminders are scheduled 24 hours before the due date{'\n'}
             • Daily reminders are sent at your chosen time each day{'\n'}
             • All notifications respect your device's Do Not Disturb settings

@@ -115,9 +115,20 @@ export const useAuthViewModel = (
     }
   };
 
+  const logout = () => {
+    console.log('🚪 AuthViewModel: Logging out user');
+    setState({
+      user: null,
+      isLoading: false,
+      error: null,
+      isAuthenticated: false,
+    });
+  };
+
   return {
     state,
     login,
     checkAuthStatus,
+    logout,
   };
 };

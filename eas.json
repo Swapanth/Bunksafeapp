@@ -9,23 +9,79 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "bunksafe-app.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "bunksafe-app",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "bunksafe-app.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "146518732652",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:146518732652:android:3325692838d1a07e748d49",
+        "EXPO_PUBLIC_FIREBASE_WEB_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_ENABLE_DEBUG_LOGS": "false",
+        "EXPO_PUBLIC_OTP_EXPIRY_MINUTES": "10",
+        "EXPO_PUBLIC_MAX_OTP_ATTEMPTS": "3",
+        "EXPO_PUBLIC_OTP_RESEND_COOLDOWN": "60"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "bunksafe-app.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "bunksafe-app",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "bunksafe-app.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "146518732652",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:146518732652:android:3325692838d1a07e748d49",
+        "EXPO_PUBLIC_FIREBASE_WEB_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_ENABLE_DEBUG_LOGS": "false",
+        "EXPO_PUBLIC_OTP_EXPIRY_MINUTES": "10",
+        "EXPO_PUBLIC_MAX_OTP_ATTEMPTS": "3",
+        "EXPO_PUBLIC_OTP_RESEND_COOLDOWN": "60"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "bunksafe-app.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "bunksafe-app",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "bunksafe-app.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "146518732652",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:146518732652:android:3325692838d1a07e748d49",
+        "EXPO_PUBLIC_FIREBASE_WEB_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_ENABLE_DEBUG_LOGS": "false",
+        "EXPO_PUBLIC_OTP_EXPIRY_MINUTES": "10",
+        "EXPO_PUBLIC_MAX_OTP_ATTEMPTS": "3",
+        "EXPO_PUBLIC_OTP_RESEND_COOLDOWN": "60"
       }
     },
     "dev-test": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "bunksafe-app.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "bunksafe-app",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "bunksafe-app.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "146518732652",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:146518732652:android:3325692838d1a07e748d49",
+        "EXPO_PUBLIC_FIREBASE_WEB_API_KEY": "AIzaSyDyQDXrhYjM53X5JmhRuFqnRg9xSqi6MFA",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_ENABLE_DEBUG_LOGS": "false",
+        "EXPO_PUBLIC_OTP_EXPIRY_MINUTES": "10",
+        "EXPO_PUBLIC_MAX_OTP_ATTEMPTS": "3",
+        "EXPO_PUBLIC_OTP_RESEND_COOLDOWN": "60"
       }
     }
   },

@@ -42,7 +42,7 @@ interface OnboardingData {
   classroomName?: string;
   classroomDescription?: string;
   
-  // Step 5: Timetable
+  // Step 6: Timetable
   timetableMethod?: 'file' | 'manual' | 'skip';
   classes?: any[];
   semesterStartDate?: string;
@@ -78,11 +78,12 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onBa
         setCurrentStep('classroom');
         break;
       case 'classroom':
-        // Skip timetable setup if user joined an existing classroom
-        if (data.classroomAction === 'join') {
-          setCurrentStep('welcome');
-        } else {
+        // Go to timetable if user created a classroom, otherwise welcome
+        if (data.classroomAction === 'create') {
           setCurrentStep('timetable');
+        } else {
+          // Join or skip
+          setCurrentStep('welcome');
         }
         break;
       case 'timetable':
@@ -117,12 +118,11 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onBa
         setCurrentStep('classroom');
         break;
       case 'welcome':
-        // If user joined a classroom, go back to classroom setup
-        // Otherwise go back to timetable
-        if (data.classroomAction === 'join') {
-          setCurrentStep('classroom');
-        } else {
+        // Navigate back based on flow
+        if (data.classroomAction === 'create') {
           setCurrentStep('timetable');
+        } else {
+          setCurrentStep('classroom');
         }
         break;
     }

@@ -1,0 +1,271 @@
+{
+  "user": {
+    "userId": "WILL_BE_GENERATED_AFTER_AUTH",
+    "email": "sreesha3345@gmail.com",
+    "password": "Sreesha@3345#.",
+    "nickname": "Sreesha",
+    "mobileNumber": "7730873455",
+    "university": "Sagi Ramakrishnam Raju Engineering College",
+    "department": "Computer Science & Engineering",
+    "yearOfStudy": "2nd Year",
+    "attendanceTarget": 75,
+    "collegeName": "Sagi Ramakrishnam Raju Engineering College",
+    "profileVisibility": "public",
+    "preferences": {
+      "whatsappNotifications": true,
+      "emailNotifications": true,
+      "attendanceReminders": true
+    },
+    "onboardingCompleted": true
+  },
+  
+  "classroom": {
+    "classroomId": "WILL_BE_GENERATED",
+    "name": "A I D S",
+    "description": "Artificial Intelligence and Data Science",
+    "code": "123456",
+    "university": "Sagi Ramakrishnam Raju Engineering College",
+    "department": "Computer Science & Engineering",
+    "attendanceTarget": 75,
+    "createdBy": "WILL_BE_USER_ID",
+    "members": ["WILL_BE_USER_ID"]
+  },
+  
+  "schedule": {
+    "semesterStartDate": "18/12/2025",
+    "semesterEndDate": "01/04/2026",
+    "classes": [
+      {
+        "id": "MEFA",
+        "name": "Managerial Economics and Financial Analysis",
+        "instructor": "NKMR",
+        "location": "W-Block Room 102"
+      },
+      {
+        "id": "CO",
+        "name": "Computer Organization",
+        "instructor": "Lakshmi Mam",
+        "location": "W-Block Room 102"
+      },
+      {
+        "id": "AI",
+        "name": "Artificial Intelligence",
+        "instructor": "Ravi Kumar Sharma Sir",
+        "location": "W-Block Room 102"
+      },
+      {
+        "id": "IDS",
+        "name": "Introduction to Data Science",
+        "instructor": "Sai Baba Sir",
+        "location": "W-Block Room 102"
+      },
+      {
+        "id": "SMDS",
+        "name": "Statistical Methods for Data Science",
+        "instructor": "BS",
+        "location": "W-Block Room 102"
+      },
+      {
+        "id": "ES",
+        "name": "Environmental Science",
+        "instructor": "Suri Babu Sir",
+        "location": "W-Block Room 102"
+      },
+      {
+        "id": "MINORS",
+        "name": "Minor Course",
+        "instructor": "Not Assigned",
+        "location": "Not Assigned"
+      },
+      {
+        "id": "PD",
+        "name": "Personality Development",
+        "instructor": "ESRR",
+        "location": "W-Block Room 102"
+      },
+      {
+        "id": "DTI_LAB",
+        "name": "Design Thinking and Innovation Lab",
+        "instructor": "BT",
+        "location": "W-T Lab, IT Block Ground Floor"
+      },
+      {
+        "id": "FSD_LAB",
+        "name": "Digital System Design Lab",
+        "instructor": "KSN",
+        "location": "K-E Lab, IT Block Third Floor"
+      },
+      {
+        "id": "AI_LAB",
+        "name": "Artificial Intelligence Programming Lab",
+        "instructor": "Ravi Kumar Sharma Sir",
+        "location": "Programming Lab, IT Block Ground Floor"
+      },
+      {
+        "id": "IDS_LAB",
+        "name": "Introduction to Data Science Lab",
+        "instructor": "Sai Baba Sir",
+        "location": "E-Classroom, U Block 2nd Floor"
+      }
+    ],
+    "weeklySchedule": {
+      "Monday": [
+        { "time": "09:00 - 09:45", "subject": "MEFA" },
+        { "time": "09:45 - 10:30", "subject": "MEFA" },
+        { "time": "10:30 - 11:15", "subject": "CO" },
+        { "time": "11:15 - 12:00", "subject": "CO" },
+        { "time": "12:00 - 13:30", "subject": "Lunch Break" },
+        { "time": "13:30 - 14:15", "subject": "AI" },
+        { "time": "14:15 - 15:00", "subject": "AI" }
+      ],
+      "Tuesday": [
+        { "time": "09:00 - 09:45", "subject": "IDS" },
+        { "time": "09:45 - 10:30", "subject": "IDS" },
+        { "time": "10:30 - 11:15", "subject": "MEFA" },
+        { "time": "11:15 - 12:00", "subject": "PD" },
+        { "time": "12:00 - 13:30", "subject": "Lunch Break" },
+        { "time": "13:30 - 14:15", "subject": "IDS_LAB" },
+        { "time": "14:15 - 15:00", "subject": "IDS_LAB" },
+        { "time": "15:00 - 15:45", "subject": "IDS_LAB" },
+        { "time": "15:45 - 16:30", "subject": "IDS_LAB" }
+      ],
+      "Wednesday": [
+        { "time": "09:00 - 09:45", "subject": "SMDS" },
+        { "time": "09:45 - 10:30", "subject": "SMDS" },
+        { "time": "10:30 - 11:15", "subject": "CO" },
+        { "time": "11:15 - 12:00", "subject": "CO" },
+        { "time": "12:00 - 13:30", "subject": "Lunch Break" },
+        { "time": "13:30 - 14:15", "subject": "ES" },
+        { "time": "14:15 - 15:00", "subject": "ES" },
+        { "time": "15:00 - 15:45", "subject": "MINORS" },
+        { "time": "15:45 - 16:30", "subject": "MINORS" }
+      ],
+      "Thursday": [
+        { "time": "09:00 - 09:45", "subject": "DTI_LAB" },
+        { "time": "09:45 - 10:30", "subject": "DTI_LAB" },
+        { "time": "10:30 - 11:15", "subject": "DTI_LAB" },
+        { "time": "11:15 - 12:00", "subject": "DTI_LAB" },
+        { "time": "12:00 - 13:30", "subject": "Lunch Break" },
+        { "time": "13:30 - 14:15", "subject": "FSD_LAB" },
+        { "time": "14:15 - 15:00", "subject": "FSD_LAB" },
+        { "time": "15:00 - 15:45", "subject": "FSD_LAB" },
+        { "time": "15:45 - 16:30", "subject": "FSD_LAB" }
+      ],
+      "Friday": [
+        { "time": "09:00 - 09:45", "subject": "AI" },
+        { "time": "09:45 - 10:30", "subject": "AI" },
+        { "time": "10:30 - 11:15", "subject": "IDS" },
+        { "time": "11:15 - 12:00", "subject": "IDS" },
+        { "time": "12:00 - 13:30", "subject": "Lunch Break" },
+        { "time": "13:30 - 14:15", "subject": "SMDS" },
+        { "time": "14:15 - 15:00", "subject": "SMDS" },
+        { "time": "15:00 - 15:45", "subject": "MINORS" },
+        { "time": "15:45 - 16:30", "subject": "MINORS" }
+      ],
+      "Saturday": [
+        { "time": "09:00 - 09:45", "subject": "AI_LAB" },
+        { "time": "09:45 - 10:30", "subject": "AI_LAB" },
+        { "time": "10:30 - 11:15", "subject": "AI_LAB" },
+        { "time": "11:15 - 12:00", "subject": "AI_LAB" }
+      ]
+    }
+  },
+  
+"UserAttendance": {
+    "comment": "Pre-app attendance data (before using the app)",
+    "subjects": {
+        "MEFA": {
+            "subject": "Managerial Economics and Financial Analysis",
+            "attendedClassesForSemester": 36,
+            "TotalClassesForSemester": 60
+        },
+        "CO": {
+            "subject": "Computer Organization",
+            "attendedClassesForSemester": 40,
+            "TotalClassesForSemester": 55
+        },
+        "AI": {
+            "subject": "Artificial Intelligence",
+            "attendedClassesForSemester": 26,
+            "TotalClassesForSemester": 62
+        },
+        "IDS": {
+            "subject": "Introduction to Data Science",
+            "attendedClassesForSemester": 20,
+            "TotalClassesForSemester": 58
+        },
+        "SMDS": {
+            "subject": "Statistical Methods for Data Science",
+            "attendedClassesForSemester": 25,
+            "TotalClassesForSemester": 60
+        },
+        "ES": {
+            "subject": "Environmental Science",
+            "attendedClassesForSemester": 20,
+            "TotalClassesForSemester": 50
+        },
+        "MINORS": {
+            "subject": "Minor Course",
+            "attendedClassesForSemester": 16,
+            "TotalClassesForSemester": 40
+        },
+        "PD": {
+            "subject": "Personality Development",
+            "attendedClassesForSemester": 12,
+            "TotalClassesForSemester": 30
+        },
+        "DTI_LAB": {
+            "subject": "Design Thinking and Innovation Lab",
+            "attendedClassesForSemester": 10,
+            "TotalClassesForSemester": 24
+        },
+        "FSD_LAB": {
+            "subject": "Digital System Design Lab",
+            "attendedClassesForSemester": 9,
+            "TotalClassesForSemester": 24
+        },
+        "AI_LAB": {
+            "subject": "Artificial Intelligence Programming Lab",
+            "attendedClassesForSemester": 10,
+            "TotalClassesForSemester": 24
+        },
+        "IDS_LAB": {
+            "subject": "Introduction to Data Science Lab",
+            "attendedClassesForSemester": 11,
+            "TotalClassesForSemester": 24
+        }
+    }
+},
+
+  "sampleAttendanceRecords": {
+    "comment": "App-tracked attendance records (after user starts using the app). Leave empty array if starting fresh.",
+    "records": []
+  },
+
+  "tasks": [
+    {
+      "title": "Complete AI Assignment",
+      "description": "Implement neural network from scratch",
+      "dueDate": "2026-02-05",
+      "priority": "high",
+      "status": "pending",
+      "subject": "Artificial Intelligence"
+    },
+    {
+      "title": "Prepare for MEFA Quiz",
+      "description": "Study financial analysis chapters",
+      "dueDate": "2026-02-03",
+      "priority": "medium",
+      "status": "pending",
+      "subject": "Managerial Economics and Financial Analysis"
+    },
+    {
+      "title": "IDS Lab Report",
+      "description": "Write report on data preprocessing",
+      "dueDate": "2026-02-10",
+      "priority": "low",
+      "status": "pending",
+      "subject": "Introduction to Data Science"
+    }
+  ]
+}

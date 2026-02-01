@@ -1,23 +1,31 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import {
-  NotificationTemplate,
-  NotificationTemplates,
-  TaskNotificationData,
+    NotificationTemplate,
+    NotificationTemplates,
+    TaskNotificationData,
 } from "../../core/constants/NotificationTemplates";
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Conditionally import and configure notifications (not available in Expo Go)
+let Notifications: any = null;
+try {
+  Notifications = require("expo-notifications");
+  // Configure notification behavior
+  if (Notifications) {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  }
+} catch (error) {
+  // Silently ignore - notifications not available in Expo Go
+}
 
 export class NotificationClientService {
   private static instance: NotificationClientService;
@@ -33,8 +41,18 @@ export class NotificationClientService {
     return NotificationClientService.instance;
   }
 
+  // Check if Notifications API is available
+  private isNotificationsAvailable(): boolean {
+    return Notifications !== null;
+  }
+
   // Initialize notification service
   async initialize(): Promise<void> {
+    if (!this.isNotificationsAvailable()) {
+      console.warn('Notifications not available - skipping initialization');
+      return;
+    }
+    
     try {
       // Try to load existing push token from storage
       const storedToken = await AsyncStorage.getItem("expoPushToken");
@@ -53,6 +71,11 @@ export class NotificationClientService {
 
   // Register for push notifications and get Expo push token
   async registerForPushNotifications(): Promise<string | null> {
+    if (!this.isNotificationsAvailable()) {
+      console.warn('Notifications not available');
+      return null;
+    }
+    
     if (!Device.isDevice) {
       console.warn("Push notifications only work on physical devices");
       return null;
@@ -78,13 +101,13 @@ export class NotificationClientService {
 
       try {
         const token = await Notifications.getExpoPushTokenAsync({
-          projectId: "bunksafe-app", // Replace with your actual project ID
+          projectId: "1a118060-a766-48bf-8dcd-d70b88fbfb32", // Bunksafe EAS project ID
         });
 
         this.expoPushToken = token.data;
         await AsyncStorage.setItem("expoPushToken", token.data);
 
-        console.log("Expo push token:", token.data);
+        console.log("✅ Expo push token obtained:", token.data);
 
         // Notify that push token is now available
         this.onPushTokenReceived?.(token.data);
@@ -93,9 +116,10 @@ export class NotificationClientService {
       } catch (tokenError) {
         // This will happen in Expo Go with SDK 53+
         console.warn(
-          "Push notifications not available in Expo Go (SDK 53+). Use development build for full functionality."
+          "⚠️ Push notifications not available in Expo Go (SDK 53+). Use development build for full functionality."
         );
         console.warn("Local notifications will still work.");
+        console.error("Token error details:", tokenError);
         return null;
       }
     } catch (error) {
@@ -105,8 +129,10 @@ export class NotificationClientService {
   }
 
   // Setup notification channels for Android
-  private async setupNotificationChannels(): Promise<void> {
-    if (Platform.OS === "android") {
+  private async setupNotificationChannels(): Promise<void> {    if (!this.isNotificationsAvailable()) {
+      return;
+    }
+        if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("task-notifications", {
         name: "Task Notifications",
         importance: Notifications.AndroidImportance.HIGH,
@@ -126,13 +152,15 @@ export class NotificationClientService {
 
   // Setup notification event listeners
   private setupNotificationListeners(): void {
+    if (!this.isNotificationsAvailable()) return;
+    
     // Handle notification received while app is in foreground
-    Notifications.addNotificationReceivedListener((notification) => {
+    Notifications.addNotificationReceivedListener((notification: any) => {
       console.log("Notification received:", notification);
     });
 
     // Handle notification response (user tapped notification)
-    Notifications.addNotificationResponseReceivedListener((response) => {
+    Notifications.addNotificationResponseReceivedListener((response: any) => {
       console.log("Notification response:", response);
       this.handleNotificationResponse(response);
     });
@@ -140,7 +168,7 @@ export class NotificationClientService {
 
   // Handle notification tap/response
   private handleNotificationResponse(
-    response: Notifications.NotificationResponse
+    response: any
   ): void {
     const data = response.notification.request.content.data;
 
@@ -163,7 +191,7 @@ export class NotificationClientService {
   // Schedule local notification using template
   async scheduleLocalNotification(
     template: NotificationTemplate,
-    trigger?: Notifications.NotificationTriggerInput
+    trigger?: any
   ): Promise<string> {
     try {
       const notificationId = await Notifications.scheduleNotificationAsync({
@@ -238,8 +266,10 @@ export class NotificationClientService {
     taskData: TaskNotificationData,
     reminderDate: Date
   ): Promise<string> {
+    if (!this.isNotificationsAvailable()) return '';
+    
     const template = NotificationTemplates.TASK_DEADLINE_APPROACHING(taskData);
-    const trigger: Notifications.DateTriggerInput = {
+    const trigger: any = {
       date: reminderDate,
       type: Notifications.SchedulableTriggerInputTypes.DATE,
     };
@@ -251,8 +281,10 @@ export class NotificationClientService {
     hour: number = 9,
     minute: number = 0
   ): Promise<string> {
+    if (!this.isNotificationsAvailable()) return '';
+    
     const template = NotificationTemplates.DAILY_TASK_REMINDER(0); // Will be updated with actual count
-    const trigger: Notifications.DailyTriggerInput = {
+    const trigger: any = {
       hour,
       minute,
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -270,9 +302,8 @@ export class NotificationClientService {
     await Notifications.cancelAllScheduledNotificationsAsync();
   }
 
-  async getScheduledNotifications(): Promise<
-    Notifications.NotificationRequest[]
-  > {
+  async getScheduledNotifications(): Promise<any[]> {
+    if (!this.isNotificationsAvailable()) return [];
     return await Notifications.getAllScheduledNotificationsAsync();
   }
 

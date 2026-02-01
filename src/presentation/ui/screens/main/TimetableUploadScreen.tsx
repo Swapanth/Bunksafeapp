@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  Modal,
-  ScrollView,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    FlatList,
+    Modal,
+    ScrollView,
+    StatusBar,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { CustomButton } from '../../components/CustomButton';
 import { CustomInput } from '../../components/CustomInput';
@@ -300,39 +300,55 @@ export const TimetableUploadScreen: React.FC<TimetableUploadScreenProps> = ({
           </View>
 
           {/* Semester Dates */}
-          <View className="bg-white rounded-2xl p-6 mb-6 border border-gray-100">
+          <View className="bg-orange-50 rounded-2xl p-6 mb-6 border-2 border-orange-300">
             <View className="flex-row items-center mb-4">
-              <Text className="text-2xl mr-3">📆</Text>
-              <Text className="text-lg font-semibold text-gray-800">
-                Semester Duration
+              <Text className="text-2xl mr-3">⚠️</Text>
+              <Text className="text-lg font-semibold text-orange-800">
+                Semester Duration (Required)
               </Text>
             </View>
+            
+            <Text className="text-orange-700 text-sm mb-4">
+              Please enter your semester dates to calculate attendance accurately
+            </Text>
 
             <View className="flex-row space-x-2">
               <View className="flex-1 mr-2">
-                <Text className="text-base font-medium text-gray-700 mb-2">Start Date</Text>
+                <Text className="text-base font-medium text-gray-700 mb-2">Start Date *</Text>
                 <TouchableOpacity
                   onPress={() => setShowStartDatePicker(true)}
-                  className="p-4 rounded-xl border border-gray-300 bg-gray-50"
+                  className={`p-4 rounded-xl border-2 ${
+                    !semesterStartDate ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
+                  }`}
                 >
                   <Text className={`text-base ${semesterStartDate ? 'text-gray-800' : 'text-gray-500'}`}>
-                    {semesterStartDate || 'Select start date'}
+                    {semesterStartDate || 'DD/MM/YYYY'}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               <View className="flex-1 ml-2">
-                <Text className="text-base font-medium text-gray-700 mb-2">End Date</Text>
+                <Text className="text-base font-medium text-gray-700 mb-2">End Date *</Text>
                 <TouchableOpacity
                   onPress={() => setShowEndDatePicker(true)}
-                  className="p-4 rounded-xl border border-gray-300 bg-gray-50"
+                  className={`p-4 rounded-xl border-2 ${
+                    !semesterEndDate ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
+                  }`}
                 >
                   <Text className={`text-base ${semesterEndDate ? 'text-gray-800' : 'text-gray-500'}`}>
-                    {semesterEndDate || 'Select end date'}
+                    {semesterEndDate || 'DD/MM/YYYY'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
+            
+            {(!semesterStartDate || !semesterEndDate) && (
+              <View className="bg-orange-100 rounded-lg p-3 mt-3">
+                <Text className="text-orange-800 text-xs">
+                  💡 Tip: Example format - 01/04/2025 (for April 1, 2025)
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Method Selection */}
@@ -442,6 +458,16 @@ export const TimetableUploadScreen: React.FC<TimetableUploadScreenProps> = ({
 
       {/* Bottom Action */}
       <View className="p-6 bg-white border-t border-gray-100">
+        {(!selectedMethod || !semesterStartDate || !semesterEndDate) && (
+          <View className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-3">
+            <Text className="text-orange-800 text-sm text-center font-medium">
+              ⚠️ Please complete:
+              {!semesterStartDate && ' Start Date'}
+              {!semesterEndDate && ' End Date'}
+              {!selectedMethod && ' Select a method'}
+            </Text>
+          </View>
+        )}
         <CustomButton
           title="Complete Setup"
           onPress={handleNext}

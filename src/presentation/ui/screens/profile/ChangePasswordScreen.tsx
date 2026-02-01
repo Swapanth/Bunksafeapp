@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-  Alert,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
+import { SkeletonLoader } from '../../components/skeletons/SkeletonLoader';
 
 interface ChangePasswordScreenProps {
   onSave?: (passwords: { currentPassword: string; newPassword: string }) => Promise<void>;
