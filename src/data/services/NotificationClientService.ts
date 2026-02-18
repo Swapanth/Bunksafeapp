@@ -147,6 +147,15 @@ export class NotificationClientService {
         vibrationPattern: [0, 250, 250, 250],
         sound: "default",
       });
+
+      await Notifications.setNotificationChannelAsync("messages", {
+        name: "Messages",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#4A90E2",
+        sound: "default",
+        enableVibrate: true,
+      });
     }
   }
 
@@ -182,6 +191,10 @@ export class NotificationClientService {
       case "daily_task_reminder":
         // Navigate to tasks list
         console.log("Navigate to tasks list");
+        break;
+      case "new_message":
+        // Navigate to chat conversation
+        console.log("Navigate to conversation:", data.conversationId);
         break;
       default:
         console.log("Unknown notification type:", data?.type);

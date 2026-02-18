@@ -239,8 +239,15 @@ export class NotificationBackendService {
     conversationId: string
   ): Promise<void> {
     try {
-      console.log('🔔 Triggering message notification for:', recipientUserId);
+      console.log('🔔 ============================================');
+      console.log('🔔 TRIGGERING MESSAGE NOTIFICATION');
+      console.log('🔔 Recipient:', recipientUserId);
+      console.log('🔔 Sender:', senderName);
+      console.log('🔔 Message:', messageContent.substring(0, 50));
+      console.log('🔔 Conversation:', conversationId);
+      console.log('🔔 ============================================');
       
+      console.log('📱 Step 1: Fetching user notification settings...');
       const settings = await this.getUserNotificationSettings(recipientUserId);
       
       if (!settings) {
@@ -257,63 +264,81 @@ export class NotificationBackendService {
           reminderHour: 9,
           reminderMinute: 0,
         });
+        console.log('✅ Default settings created');
+        
         // Re-fetch settings
+        console.log('📱 Step 2: Re-fetching settings after creation...');
         const newSettings = await this.getUserNotificationSettings(recipientUserId);
         if (!newSettings?.expoPushToken) {
-          console.log('⚠️ No push token found for user after creating settings');
+          console.error('❌ FATAL: No push token found for user after creating settings');
+          console.error('❌ User needs to restart app or trigger token registration');
           return;
         }
       }
       
       // Check if user has message notifications enabled (default true if not set)
       const messageNotificationsEnabled = settings?.messageNotifications ?? true;
-      console.log('📱 Message notifications enabled:', messageNotificationsEnabled);
+      console.log('📱 Step 3: Checking if message notifications are enabled...');
+      console.log('   messageNotifications:', messageNotificationsEnabled);
       
       if (!messageNotificationsEnabled) {
         console.log('🔕 Message notifications disabled for user:', recipientUserId);
         return;
       }
+      console.log('✅ Message notifications are ENABLED');
 
       // Check if user has a push token
+      console.log('📱 Step 4: Checking for push token...');
       if (!settings?.expoPushToken) {
-        console.log('⚠️ No push token found for user:', recipientUserId);
+        console.error('❌ FATAL: No push token found for user:', recipientUserId);
+        console.error('❌ This user has never registered for push notifications');
+        console.error('❌ User needs to:');
+        console.error('   1. Grant notification permissions');
+        console.error('   2. Restart the app');
+        console.error('   3. Ensure they are on a physical device (not simulator)');
         return;
       }
 
       console.log('✅ Push token found:', settings.expoPushToken.substring(0, 20) + '...');
+      console.log('   Full token:', settings.expoPushToken);
 
       // Create notification template
+      console.log('📱 Step 5: Creating notification template...');
       const template = {
         id: 'new_message',
-        title: senderName,
+        title: `💬 ${senderName}`,
         body: messageContent.length > 100 ? messageContent.substring(0, 97) + '...' : messageContent,
         data: {
           type: 'new_message',
           conversationId: conversationId,
-          senderId: senderName,
+          senderName: senderName,
         },
+        priority: 'high' as const,
       };
-
-      console.log('📤 Sending push notification:', template.title, '-', template.body);
+      console.log('✅ Template created:', JSON.stringify(template, null, 2));
 
       // Try to save notification record
+      console.log('📱 Step 6: Saving notification record to Firestore...');
       try {
         await this.saveNotificationRecord(recipientUserId, template);
+        console.log('✅ Notification record saved');
       } catch (saveError) {
-        console.warn('Could not save notification record, but continuing:', saveError);
+        console.warn('⚠️ Could not save notification record, but continuing:', saveError);
       }
 
-      // Skip push notification on web platform (CORS restriction)
-      if (typeof window !== 'undefined' && window.location) {
-        console.log('ℹ️ Skipping push notification on web platform (use native app for push notifications)');
-        return;
-      }
-
-      // Send push notification (only works on native apps or from backend)
+      // Send push notification directly
+      console.log('📱 Step 7: Sending push notification to Expo...');
       await this.sendPushNotificationToUser(settings.expoPushToken, template);
-      console.log('✅ Message notification sent successfully to:', recipientUserId);
+      console.log('🎉 ============================================');
+      console.log('🎉 MESSAGE NOTIFICATION SENT SUCCESSFULLY!');
+      console.log('🎉 Recipient:', recipientUserId);
+      console.log('🎉 ============================================');
     } catch (error) {
-      console.error('❌ Failed to trigger message notification:', error);
+      console.error('❌ ============================================');
+      console.error('❌ FAILED TO TRIGGER MESSAGE NOTIFICATION');
+      console.error('❌ Error:', error);
+      console.error('❌ Stack:', (error as Error).stack);
+      console.error('❌ ============================================');
       // Don't throw to prevent breaking message sending flow
     }
   }
@@ -437,14 +462,19 @@ export class NotificationBackendService {
     expoPushToken: string,
     template: NotificationTemplate
   ): Promise<void> {
-    const message = {
+    const message: any = {
       to: expoPushToken,
       sound: 'default',
       title: template.title,
       body: template.body,
       data: template.data,
-      priority: template.priority || 'default',
+      priority: template.priority || 'high',
     };
+
+    // Add Android-specific channel for message notifications
+    if (template.data?.type === 'new_message') {
+      message.channelId = 'messages';
+    }
 
     try {
       console.log('📤 Sending push to Expo:', { 
@@ -465,15 +495,41 @@ export class NotificationBackendService {
 
       const result = await response.json();
       
+      console.log('📥 ============================================');
+      console.log('📥 EXPO PUSH RESPONSE');
+      console.log('📥 Status:', response.status);
+      console.log('📥 OK:', response.ok);
+      console.log('📥 Result:', JSON.stringify(result, null, 2));
+      console.log('📥 ============================================');
+      
       if (response.ok) {
-        console.log('✅ Push notification sent successfully:', result);
+        if (result.data && result.data[0]) {
+          const data = result.data[0];
+          if (data.status === 'error') {
+            console.error('❌ EXPO RETURNED ERROR:', data.message);
+            console.error('❌ Details:', data.details);
+          } else {
+            console.log('✅ Push notification accepted by Expo');
+            console.log('✅ Ticket ID:', data.id);
+          }
+        } else {
+          console.log('✅ Push notification sent successfully');
+        }
       } else {
-        console.error('❌ Push notification failed:', result);
+        console.error('❌ HTTP ERROR from Expo:', response.status);
+        console.error('❌ Response body:', result);
+        throw new Error(`Push notification failed: ${response.status} - ${JSON.stringify(result)}`);
       }
       
       return result;
     } catch (error) {
-      console.error('❌ Failed to send push notification:', error);
+      console.error('❌ ============================================');
+      console.error('❌ EXCEPTION WHILE SENDING PUSH NOTIFICATION');
+      console.error('❌ Error:', error);
+      console.error('❌ Error type:', (error as Error).constructor.name);
+      console.error('❌ Error message:', (error as Error).message);
+      console.error('❌ Stack:', (error as Error).stack);
+      console.error('❌ ============================================');
       throw error;
     }
   }

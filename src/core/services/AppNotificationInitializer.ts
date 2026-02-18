@@ -74,13 +74,22 @@ export class AppNotificationInitializer {
     firebaseNotificationService: NotificationBackendService
   ): Promise<void> {
     try {
+      console.log('🔧 ============================================');
+      console.log('🔧 SETTING UP USER NOTIFICATIONS');
+      console.log('🔧 User ID:', userId);
+      console.log('🔧 ============================================');
+      
       // Get or create user notification settings
+      console.log('📱 Step 1: Fetching existing notification settings...');
       let settings = await firebaseNotificationService.getUserNotificationSettings(userId);
       
       // Get the push token (this might be null if not available yet)
+      console.log('📱 Step 2: Getting push token from client service...');
       const pushToken = notificationService.getExpoPushToken();
+      console.log('   Push token:', pushToken ? pushToken.substring(0, 30) + '...' : 'NOT AVAILABLE');
       
       if (!settings) {
+        console.log('📱 Step 3: No settings found, creating defaults...');
         // Create default settings for new user
         const defaultSettings = {
           userId,
@@ -96,8 +105,13 @@ export class AppNotificationInitializer {
           ...(pushToken && { expoPushToken: pushToken }),
         };
         
+        console.log('   Creating settings with:', JSON.stringify({ ...defaultSettings, expoPushToken: pushToken ? 'TOKEN_SET' : 'NULL' }));
         await firebaseNotificationService.saveUserNotificationSettings(defaultSettings);
+        console.log('✅ Default settings created');
         settings = defaultSettings as any;
+      } else {
+        console.log('✅ Existing settings found');
+        console.log('   Current token in settings:', settings.expoPushToken ? settings.expoPushToken.substring(0, 30) + '...' : 'NONE');
       }
 
       // Ensure settings is not null before proceeding
@@ -106,8 +120,22 @@ export class AppNotificationInitializer {
       }
 
       // Update push token if available and different from stored token
+      console.log('📱 Step 4: Checking if push token needs update...');
       if (pushToken && pushToken !== settings.expoPushToken) {
+        console.log('🔄 Push token changed or not set, updating...');
+        console.log('   Old token:', settings.expoPushToken ? settings.expoPushToken.substring(0, 30) + '...' : 'NONE');
+        console.log('   New token:', pushToken.substring(0, 30) + '...');
         await firebaseNotificationService.updateUserPushToken(userId, pushToken);
+        console.log('✅ Push token updated');
+      } else if (!pushToken) {
+        console.warn('⚠️ NO PUSH TOKEN AVAILABLE YET');
+        console.warn('⚠️ User will not receive push notifications until token is obtained');
+        console.warn('⚠️ This can happen if:');
+        console.warn('   1. User denied notification permissions');
+        console.warn('   2. Running in Expo Go (push not supported)');
+        console.warn('   3. Token registration is still in progress');
+      } else {
+        console.log('✅ Push token already up to date');
       }
 
       // Schedule daily reminders if enabled
@@ -197,16 +225,45 @@ export class AppNotificationInitializer {
   // Method to update push token when it becomes available
   async updatePushTokenForUser(userId: string): Promise<void> {
     try {
+      console.log('🔄 ============================================');
+      console.log('🔄 PUSH TOKEN CALLBACK TRIGGERED');
+      console.log('🔄 User ID:', userId);
+      console.log('🔄 ============================================');
+      
       const notificationService = NotificationClientService.getInstance();
       const firebaseNotificationService = NotificationBackendService.getInstance();
       
       const pushToken = notificationService.getExpoPushToken();
+      console.log('📱 Push token from client:', pushToken ? pushToken.substring(0, 30) + '...' : 'NULL');
+      
       if (pushToken) {
         const settings = await firebaseNotificationService.getUserNotificationSettings(userId);
+        console.log('📱 Current token in Firestore:', settings?.expoPushToken ? settings.expoPushToken.substring(0, 30) + '...' : 'NULL');
+        
         if (settings && pushToken !== settings.expoPushToken) {
+          console.log('🔄 Updating push token in Firestore...');
           await firebaseNotificationService.updateUserPushToken(userId, pushToken);
-          console.log('Push token updated for user:', userId);
+          console.log('✅ Push token updated successfully');
+        } else if (!settings) {
+          console.log('⚠️ No settings found, creating with push token...');
+          await firebaseNotificationService.saveUserNotificationSettings({
+            userId,
+            expoPushToken: pushToken,
+            messageNotifications: true,
+            taskCreated: true,
+            taskCompleted: true,
+            deadlineReminders: true,
+            dailyReminders: true,
+            weeklyReports: true,
+            reminderHour: 9,
+            reminderMinute: 0,
+          });
+          console.log('✅ Settings created with push token');
+        } else {
+          console.log('✅ Push token already up to date');
         }
+      } else {
+        console.error('❌ No push token available in callback');
       }
     } catch (error) {
       console.error('Failed to update push token:', error);

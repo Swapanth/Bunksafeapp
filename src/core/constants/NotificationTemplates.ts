@@ -145,4 +145,19 @@ export const NotificationTemplates = {
     sound: "default",
     badge: 1,
   }),
+
+  NEW_MESSAGE: (senderName: string, messageContent: string, conversationId: string): NotificationTemplate => ({
+    id: `new_message_${Date.now()}`,
+    title: `💬 ${senderName}`,
+    body: messageContent.length > 100 ? messageContent.substring(0, 97) + '...' : messageContent,
+    data: {
+      type: "new_message",
+      conversationId,
+      senderName,
+      timestamp: new Date().toISOString(),
+    },
+    priority: "high",
+    sound: "default",
+    badge: 1,
+  }),
 };
